@@ -1,7 +1,8 @@
 # 🎀 Springfield Pet · 春田桌宠
 
 一只陪你写代码的桌面宠物 —— 以《少女前线》春田 (M1903) 的 Q 版形象为基础，
-基于 **PySide6** 的跨平台桌面伴侣，并能**联动 Claude Code / Codex（TBD） 的运行状态**。
+基于 **PySide6** 的跨平台桌面伴侣，能**同时联动 Claude Code 与 Codex 的运行状态**，
+在头顶显示各自的「项目名 · 当前活动」对话框。
 
 <p align="center">
   <img src="docs/icon-candidates/ic_pixel_mild.png" width="140" alt="Springfield Pet icon">
@@ -43,8 +44,8 @@
 
 - **动画桌宠**：待机 / 走动 / 卖萌 / 坐躺休息，透明背景、始终置顶、按脚底锚点渲染不跳。
 - **5 套衣服**：默认水手服 / 女巫装 / 红斗篷 / 蓝礼服 / 泳装，每套含「战斗 + 休息」两套动作；支持定时自动换装。
-- **交互**：拖动、单击摸摸、**双击弹出头顶输入框**给 Claude 发指令、右键全功能菜单、悬浮显示状态栏。
-- **Claude Code 状态联动**：Claude 开工 → 举放大镜盯着；需要确认 → 警戒+通知；跑完 → 庆祝并**持续提醒直到你理会**。
+- **交互**：拖动、单击摸摸、**双击弹出头顶输入框**发指令(可选发给 Claude / Codex)、右键全功能菜单、悬浮显示状态栏、大小 75–150%。
+- **Claude / Codex 状态联动**：**可同时监控两个 AI**,头顶各一个带图标的对话框(🟠Claude 橙花 / ⚫Codex 黑圆六角星),显示「项目名 · 当前活动」+ 转圈；开工→举放大镜研究,需要授权/确认 & 跑完 → **持续提醒直到你理会**。右上角玻璃标签一键收起/展开。
 - **OpenPets 风格小工具**：番茄钟专注计时、喝水提醒、自定义提醒、情绪记录、石头剪刀布、快捷启动、虚拟属性(心情/饱食/精力/等级)。
 - **迷你音乐播放器**：选文件夹播放，进度/上一首/下一首/播放暂停/循环模式，可拖动悬浮窗。
 
@@ -67,23 +68,27 @@ pip install -r requirements.txt
 python run.py
 ```
 
-## 🔗 联动 Claude Code 状态
+## 🔗 联动 Claude Code / Codex 状态
 
 <p align="center">
-  <img src="docs/demo_magnifier.gif" width="200" alt="Claude 工作时举放大镜研究">
-  <br><sub>Claude 工作时，春田会举起放大镜「研究」</sub>
+  <img src="docs/demo_magnifier.gif" width="200" alt="工作时举放大镜研究">
+  <br><sub>AI 工作时，春田会举起放大镜「研究」</sub>
 </p>
 
-让桌宠跟随 Claude 的运行状态（开工 / 需要确认 / 跑完）自动反应。**装好 App 后照下面做一次即可，之后全自动。**
+让桌宠跟随 AI 的运行状态自动反应,并在头顶显示「项目名 · 当前活动」。
+**Claude Code 与 Codex 可同时接入**(不是二选一),接入哪个就显示哪个对话框。
+**装好 App 后照下面做一次即可,之后全自动。**
 
-支持 **Claude Code** 和 **Codex** —— 右键 → **「🔗 状态联动（二选一）」** 里勾选其一即可。
+### 方式一:一键接入(推荐,零配置)
 
-### 方式一：一键接入（推荐，零配置）
+右键 → **「🔗 状态联动(可多选)」** → 勾选 Claude Code 和/或 Codex:
 
-- **Claude Code**：勾选后自动把 hooks 合并进 `~/.claude/settings.json`（备份原文件、不覆盖已有配置），支持「开工 / 需确认 / 跑完」全套状态。
-- **Codex**：勾选后自动配置 `~/.codex/config.toml` 的 `notify`（备份 + **串联保留你原有的 notify / Computer Use**）。Codex 的 notify 较粗，主要在**回合结束**触发 → 春田会庆祝并持续提醒。
+- **Claude Code**:自动把 hooks 合并进 `~/.claude/settings.json`(备份、不覆盖已有配置)。
+  经助手脚本解析事件,可显示细粒度活动(读取/搜索/运行 X…)、需要授权、以及完成时的**结论开头**。
+- **Codex**:自动配置 `~/.codex/config.toml` 的 `notify`(备份 + **串联保留你原有的 notify / Computer Use**)。
+  Codex 的 notify 较粗,主要在**回合结束**触发 → 春田庆祝并持续提醒。
 
-再点一次即「断开」，会还原原始配置。
+再点一次即「断开」,会还原原始配置。
 
 ### 方式二：手动配置
 
