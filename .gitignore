@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller 构建产物
+build/work/
+build/*.spec.bak
+dist/
+*.app/
+*.exe
+
+# 运行时数据
+.springfield_pet/
+
+# 系统
+.DS_Store
+Thumbs.db

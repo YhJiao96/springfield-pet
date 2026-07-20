@@ -1,0 +1,4 @@
+# 大体积素材建议用 Git LFS 管理(需先 `brew install git-lfs && git lfs install`)
+assets/pet_assets/**/*.png filter=lfs diff=lfs merge=lfs -text
+assets/pet_assets/**/*.apng filter=lfs diff=lfs merge=lfs -text
+build/icon.icns filter=lfs diff=lfs merge=lfs -text
