@@ -42,6 +42,18 @@ STATE_DIR = Path.home() / ".springfield_pet"
 STATE_FILE = STATE_DIR / "state.json"
 CLAUDE_STATE_FILE = STATE_DIR / "claude_state"
 
+# Claude Code 一键接入
+CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
+HOOK_TAG = "springfield_pet/claude_state"   # 用于识别本项目写入的 hook
+# (事件, 写入的状态词, matcher 或 None)
+HOOK_EVENTS = [
+    ("UserPromptSubmit", "working", None),
+    ("PreToolUse", "working", "*"),
+    ("Notification", "waiting", None),
+    ("Stop", "done", None),
+    ("SessionStart", "idle", None),
+]
+
 DEFAULT_STATE = {
     "stats": {"hunger": 80, "happiness": 80, "energy": 80, "xp": 0, "level": 1},
     "mood_log": [],
@@ -747,6 +759,10 @@ class Companion(base.Pet):
         m.addSeparator()
         m.addAction("💬 发指令给 Claude", self.open_prompt)
         m.addAction("🖥 呼出 Claude 窗口", self.raise_claude)
+        if self.hooks_installed():
+            m.addAction("🔗 已接入 Claude 状态 · 点此断开", self.remove_claude_hooks)
+        else:
+            m.addAction("🔗 一键接入 Claude 状态联动", self.setup_claude_hooks)
         m.addSeparator()
         m.addAction("🍚 喂食", self.feed)
         m.addAction("🎮 石头剪刀布", self.play_rps)
@@ -837,6 +853,75 @@ class Companion(base.Pet):
     def toggle_auto_outfit(self, checked):
         self.data["auto_outfit"] = checked; self.last_outfit_change = time.time(); self.save()
         self.speak("定时换装已" + (f"开启(每{self.data.get('auto_outfit_min',30)}分钟)👗" if checked else "关闭"), 4)
+
+    # ---------- Claude Code 一键接入 ----------
+    @staticmethod
+    def _hook_cmd(state):
+        return f"mkdir -p ~/.springfield_pet && echo {state} > ~/.springfield_pet/claude_state"
+
+    def hooks_installed(self):
+        try:
+            data = json.loads(CLAUDE_SETTINGS.read_text())
+        except Exception:
+            return False
+        for entries in data.get("hooks", {}).values():
+            for e in entries if isinstance(entries, list) else []:
+                for h in e.get("hooks", []):
+                    if HOOK_TAG in h.get("command", ""):
+                        return True
+        return False
+
+    def setup_claude_hooks(self):
+        try:
+            data = json.loads(CLAUDE_SETTINGS.read_text()) if CLAUDE_SETTINGS.exists() else {}
+        except Exception:
+            data = {}
+        # 备份原文件
+        if CLAUDE_SETTINGS.exists():
+            try:
+                (CLAUDE_SETTINGS.parent / "settings.json.springfieldpet.bak").write_text(
+                    CLAUDE_SETTINGS.read_text())
+            except Exception:
+                pass
+        hooks = data.setdefault("hooks", {})
+        added = 0
+        for event, state, matcher in HOOK_EVENTS:
+            entries = hooks.setdefault(event, [])
+            present = any(HOOK_TAG in h.get("command", "")
+                          for e in entries if isinstance(e, dict)
+                          for h in e.get("hooks", []))
+            if not present:
+                entry = {"hooks": [{"type": "command", "command": self._hook_cmd(state)}]}
+                if matcher:
+                    entry["matcher"] = matcher
+                entries.append(entry); added += 1
+        try:
+            CLAUDE_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+            CLAUDE_SETTINGS.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        except Exception as ex:
+            self.speak(f"写入失败: {ex}", 5); return
+        if added:
+            self.speak(f"已接入 Claude Code(+{added} hooks)!新开会话即生效 🔗", 8,
+                       notify=True, title="Claude 联动已开启")
+        else:
+            self.speak("已经接入过啦,无需重复 🔗", 4)
+
+    def remove_claude_hooks(self):
+        try:
+            data = json.loads(CLAUDE_SETTINGS.read_text())
+        except Exception:
+            self.speak("没有可断开的配置", 3); return
+        for event, entries in list(data.get("hooks", {}).items()):
+            data["hooks"][event] = [
+                e for e in entries
+                if not any(HOOK_TAG in h.get("command", "") for h in e.get("hooks", []))]
+            if not data["hooks"][event]:
+                del data["hooks"][event]
+        try:
+            CLAUDE_SETTINGS.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+            self.speak("已断开 Claude 联动(新开会话生效)", 5)
+        except Exception as ex:
+            self.speak(f"写入失败: {ex}", 5)
 
     # ---------- 功能实现 ----------
     def feed(self):

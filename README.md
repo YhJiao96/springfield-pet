@@ -57,7 +57,17 @@ python run.py
 
 ## 🔗 联动 Claude Code 状态
 
-在 `~/.claude/settings.json` 加入 hooks，让 Claude 各事件把状态写进一个文件，桌宠监听并反应：
+让桌宠跟随 Claude 的运行状态（开工 / 需要确认 / 跑完）自动反应。**装好 App 后照下面做一次即可，之后全自动。**
+
+### 方式一：一键接入（推荐，零配置）
+
+启动桌宠 → **右键 → 「🔗 一键接入 Claude 状态联动」**。
+它会自动、安全地把所需 hooks 合并进 `~/.claude/settings.json`（自动备份原文件，不覆盖你已有的配置）。
+再点一次可「断开」。
+
+### 方式二：手动配置
+
+若想自己改，或在 Windows 上，把下面的 hooks 加进 `~/.claude/settings.json`：
 
 ```json
 {
@@ -71,7 +81,7 @@ python run.py
 }
 ```
 
-> hooks 在**会话启动时加载**，改完需**新开一个 Claude Code 会话**才生效。
+> ⚠️ **无论哪种方式**，hooks 都在 **Claude Code 会话启动时加载**，所以配置后需**新开一个 Claude Code 会话**才生效（旧会话不受影响）。之后你正常用 Claude，桌宠就会自动跟随状态，**无需再手动运行任何东西**。
 
 ## ⌨️ 把指令键入当前终端（macOS）
 
