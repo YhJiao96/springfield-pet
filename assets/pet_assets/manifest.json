@@ -1,0 +1,1235 @@
+{
+  "fps": 25,
+  "skins": {
+    "M1903": {
+      "animations": {
+        "attack": {
+          "frames": 13,
+          "size": [
+            278,
+            273
+          ],
+          "anchor": [
+            107.0,
+            249.2
+          ],
+          "loop": false,
+          "suggested_state": "click_react",
+          "apng": "M1903/attack.apng",
+          "frames_dir": "M1903/attack/"
+        },
+        "die": {
+          "frames": 50,
+          "size": [
+            355,
+            361
+          ],
+          "anchor": [
+            123.0,
+            251.2
+          ],
+          "loop": false,
+          "suggested_state": "error/hurt",
+          "apng": "M1903/die.apng",
+          "frames_dir": "M1903/die/"
+        },
+        "move": {
+          "frames": 15,
+          "size": [
+            265,
+            287
+          ],
+          "anchor": [
+            115.0,
+            263.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "M1903/move.apng",
+          "frames_dir": "M1903/move/"
+        },
+        "spine": {
+          "frames": 22,
+          "size": [
+            287,
+            283
+          ],
+          "anchor": [
+            117.0,
+            259.2
+          ],
+          "loop": false,
+          "suggested_state": "skill/thinking",
+          "apng": "M1903/spine.apng",
+          "frames_dir": "M1903/spine/"
+        },
+        "victory": {
+          "frames": 75,
+          "size": [
+            279,
+            288
+          ],
+          "anchor": [
+            141.0,
+            264.2
+          ],
+          "loop": false,
+          "suggested_state": "success_intro",
+          "apng": "M1903/victory.apng",
+          "frames_dir": "M1903/victory/"
+        },
+        "victoryloop": {
+          "frames": 25,
+          "size": [
+            208,
+            287
+          ],
+          "anchor": [
+            138.0,
+            263.2
+          ],
+          "loop": true,
+          "suggested_state": "success_idle",
+          "apng": "M1903/victoryloop.apng",
+          "frames_dir": "M1903/victoryloop/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            263,
+            280
+          ],
+          "anchor": [
+            125.0,
+            256.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "M1903/wait.apng",
+          "frames_dir": "M1903/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            263,
+            332
+          ],
+          "anchor": [
+            125.0,
+            308.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "M1903/thinking.apng",
+          "frames_dir": "M1903/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            231,
+            284
+          ],
+          "anchor": [
+            127.0,
+            258.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "M1903/inspect.apng",
+          "frames_dir": "M1903/inspect/"
+        }
+      }
+    },
+    "M1903_5": {
+      "animations": {
+        "attack": {
+          "frames": 13,
+          "size": [
+            293,
+            309
+          ],
+          "anchor": [
+            122.0,
+            291.2
+          ],
+          "loop": false,
+          "suggested_state": "click_react",
+          "apng": "M1903_5/attack.apng",
+          "frames_dir": "M1903_5/attack/"
+        },
+        "die": {
+          "frames": 50,
+          "size": [
+            390,
+            405
+          ],
+          "anchor": [
+            146.0,
+            295.2
+          ],
+          "loop": false,
+          "suggested_state": "error/hurt",
+          "apng": "M1903_5/die.apng",
+          "frames_dir": "M1903_5/die/"
+        },
+        "move": {
+          "frames": 15,
+          "size": [
+            279,
+            325
+          ],
+          "anchor": [
+            112.0,
+            307.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "M1903_5/move.apng",
+          "frames_dir": "M1903_5/move/"
+        },
+        "victory": {
+          "frames": 75,
+          "size": [
+            310,
+            328
+          ],
+          "anchor": [
+            172.0,
+            310.2
+          ],
+          "loop": false,
+          "suggested_state": "success_intro",
+          "apng": "M1903_5/victory.apng",
+          "frames_dir": "M1903_5/victory/"
+        },
+        "victoryloop": {
+          "frames": 25,
+          "size": [
+            275,
+            325
+          ],
+          "anchor": [
+            169.0,
+            307.2
+          ],
+          "loop": true,
+          "suggested_state": "success_idle",
+          "apng": "M1903_5/victoryloop.apng",
+          "frames_dir": "M1903_5/victoryloop/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            283,
+            317
+          ],
+          "anchor": [
+            145.0,
+            299.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "M1903_5/wait.apng",
+          "frames_dir": "M1903_5/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            283,
+            332
+          ],
+          "anchor": [
+            145.0,
+            314.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "M1903_5/thinking.apng",
+          "frames_dir": "M1903_5/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            284,
+            321
+          ],
+          "anchor": [
+            147.0,
+            301.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "M1903_5/inspect.apng",
+          "frames_dir": "M1903_5/inspect/"
+        }
+      }
+    },
+    "M1903_302": {
+      "animations": {
+        "attack": {
+          "frames": 13,
+          "size": [
+            270,
+            271
+          ],
+          "anchor": [
+            104.0,
+            247.2
+          ],
+          "loop": false,
+          "suggested_state": "click_react",
+          "apng": "M1903_302/attack.apng",
+          "frames_dir": "M1903_302/attack/"
+        },
+        "die": {
+          "frames": 38,
+          "size": [
+            337,
+            321
+          ],
+          "anchor": [
+            151.0,
+            250.2
+          ],
+          "loop": false,
+          "suggested_state": "error/hurt",
+          "apng": "M1903_302/die.apng",
+          "frames_dir": "M1903_302/die/"
+        },
+        "move": {
+          "frames": 15,
+          "size": [
+            275,
+            292
+          ],
+          "anchor": [
+            125.0,
+            268.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "M1903_302/move.apng",
+          "frames_dir": "M1903_302/move/"
+        },
+        "spine": {
+          "frames": 22,
+          "size": [
+            279,
+            284
+          ],
+          "anchor": [
+            113.0,
+            260.2
+          ],
+          "loop": false,
+          "suggested_state": "skill/thinking",
+          "apng": "M1903_302/spine.apng",
+          "frames_dir": "M1903_302/spine/"
+        },
+        "victory": {
+          "frames": 75,
+          "size": [
+            280,
+            308
+          ],
+          "anchor": [
+            141.0,
+            284.2
+          ],
+          "loop": false,
+          "suggested_state": "success_intro",
+          "apng": "M1903_302/victory.apng",
+          "frames_dir": "M1903_302/victory/"
+        },
+        "victoryloop": {
+          "frames": 25,
+          "size": [
+            232,
+            293
+          ],
+          "anchor": [
+            138.0,
+            269.2
+          ],
+          "loop": true,
+          "suggested_state": "success_idle",
+          "apng": "M1903_302/victoryloop.apng",
+          "frames_dir": "M1903_302/victoryloop/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            249,
+            285
+          ],
+          "anchor": [
+            110.0,
+            261.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "M1903_302/wait.apng",
+          "frames_dir": "M1903_302/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            249,
+            334
+          ],
+          "anchor": [
+            110.0,
+            310.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "M1903_302/thinking.apng",
+          "frames_dir": "M1903_302/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            243,
+            289
+          ],
+          "anchor": [
+            112.0,
+            263.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "M1903_302/inspect.apng",
+          "frames_dir": "M1903_302/inspect/"
+        }
+      }
+    },
+    "M1903_802": {
+      "animations": {
+        "attack": {
+          "frames": 13,
+          "size": [
+            310,
+            267
+          ],
+          "anchor": [
+            92.0,
+            249.2
+          ],
+          "loop": false,
+          "suggested_state": "click_react",
+          "apng": "M1903_802/attack.apng",
+          "frames_dir": "M1903_802/attack/"
+        },
+        "die": {
+          "frames": 50,
+          "size": [
+            402,
+            375
+          ],
+          "anchor": [
+            125.0,
+            263.2
+          ],
+          "loop": false,
+          "suggested_state": "error/hurt",
+          "apng": "M1903_802/die.apng",
+          "frames_dir": "M1903_802/die/"
+        },
+        "move": {
+          "frames": 15,
+          "size": [
+            289,
+            282
+          ],
+          "anchor": [
+            92.0,
+            264.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "M1903_802/move.apng",
+          "frames_dir": "M1903_802/move/"
+        },
+        "victory": {
+          "frames": 93,
+          "size": [
+            353,
+            326
+          ],
+          "anchor": [
+            167.0,
+            290.2
+          ],
+          "loop": false,
+          "suggested_state": "success_intro",
+          "apng": "M1903_802/victory.apng",
+          "frames_dir": "M1903_802/victory/"
+        },
+        "victoryloop": {
+          "frames": 33,
+          "size": [
+            263,
+            281
+          ],
+          "anchor": [
+            152.0,
+            263.2
+          ],
+          "loop": true,
+          "suggested_state": "success_idle",
+          "apng": "M1903_802/victoryloop.apng",
+          "frames_dir": "M1903_802/victoryloop/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            285,
+            274
+          ],
+          "anchor": [
+            98.0,
+            256.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "M1903_802/wait.apng",
+          "frames_dir": "M1903_802/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            285,
+            324
+          ],
+          "anchor": [
+            98.0,
+            306.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "M1903_802/thinking.apng",
+          "frames_dir": "M1903_802/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            183,
+            278
+          ],
+          "anchor": [
+            100.0,
+            258.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "M1903_802/inspect.apng",
+          "frames_dir": "M1903_802/inspect/"
+        }
+      }
+    },
+    "M1903_1107": {
+      "animations": {
+        "attack": {
+          "frames": 13,
+          "size": [
+            331,
+            313
+          ],
+          "anchor": [
+            156.0,
+            293.2
+          ],
+          "loop": false,
+          "suggested_state": "click_react",
+          "apng": "M1903_1107/attack.apng",
+          "frames_dir": "M1903_1107/attack/"
+        },
+        "die": {
+          "frames": 41,
+          "size": [
+            466,
+            367
+          ],
+          "anchor": [
+            252.0,
+            296.2
+          ],
+          "loop": false,
+          "suggested_state": "error/hurt",
+          "apng": "M1903_1107/die.apng",
+          "frames_dir": "M1903_1107/die/"
+        },
+        "move": {
+          "frames": 15,
+          "size": [
+            330,
+            316
+          ],
+          "anchor": [
+            151.0,
+            296.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "M1903_1107/move.apng",
+          "frames_dir": "M1903_1107/move/"
+        },
+        "victory": {
+          "frames": 85,
+          "size": [
+            421,
+            342
+          ],
+          "anchor": [
+            250.0,
+            295.2
+          ],
+          "loop": false,
+          "suggested_state": "success_intro",
+          "apng": "M1903_1107/victory.apng",
+          "frames_dir": "M1903_1107/victory/"
+        },
+        "victoryloop": {
+          "frames": 33,
+          "size": [
+            298,
+            289
+          ],
+          "anchor": [
+            240.0,
+            268.2
+          ],
+          "loop": true,
+          "suggested_state": "success_idle",
+          "apng": "M1903_1107/victoryloop.apng",
+          "frames_dir": "M1903_1107/victoryloop/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            303,
+            309
+          ],
+          "anchor": [
+            160.0,
+            289.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "M1903_1107/wait.apng",
+          "frames_dir": "M1903_1107/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            303,
+            338
+          ],
+          "anchor": [
+            160.0,
+            318.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "M1903_1107/thinking.apng",
+          "frames_dir": "M1903_1107/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            307,
+            313
+          ],
+          "anchor": [
+            162.0,
+            291.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "M1903_1107/inspect.apng",
+          "frames_dir": "M1903_1107/inspect/"
+        }
+      }
+    },
+    "RM1903": {
+      "animations": {
+        "lying": {
+          "frames": 67,
+          "size": [
+            280,
+            164
+          ],
+          "anchor": [
+            117.0,
+            104.2
+          ],
+          "loop": true,
+          "suggested_state": "sleep",
+          "apng": "RM1903/lying.apng",
+          "frames_dir": "RM1903/lying/"
+        },
+        "move": {
+          "frames": 33,
+          "size": [
+            225,
+            285
+          ],
+          "anchor": [
+            122.0,
+            271.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "RM1903/move.apng",
+          "frames_dir": "RM1903/move/"
+        },
+        "pick": {
+          "frames": 33,
+          "size": [
+            262,
+            242
+          ],
+          "anchor": [
+            101.0,
+            76.2
+          ],
+          "loop": true,
+          "suggested_state": "busy/pick",
+          "apng": "RM1903/pick.apng",
+          "frames_dir": "RM1903/pick/"
+        },
+        "sit": {
+          "frames": 33,
+          "size": [
+            191,
+            254
+          ],
+          "anchor": [
+            100.0,
+            192.2
+          ],
+          "loop": true,
+          "suggested_state": "sit",
+          "apng": "RM1903/sit.apng",
+          "frames_dir": "RM1903/sit/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            240,
+            276
+          ],
+          "anchor": [
+            125.0,
+            266.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "RM1903/wait.apng",
+          "frames_dir": "RM1903/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            240,
+            306
+          ],
+          "anchor": [
+            125.0,
+            296.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "RM1903/thinking.apng",
+          "frames_dir": "RM1903/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            244,
+            280
+          ],
+          "anchor": [
+            127.0,
+            268.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "RM1903/inspect.apng",
+          "frames_dir": "RM1903/inspect/"
+        }
+      }
+    },
+    "RM1903_5": {
+      "animations": {
+        "lying": {
+          "frames": 67,
+          "size": [
+            324,
+            200
+          ],
+          "anchor": [
+            112.0,
+            173.2
+          ],
+          "loop": true,
+          "suggested_state": "sleep",
+          "apng": "RM1903_5/lying.apng",
+          "frames_dir": "RM1903_5/lying/"
+        },
+        "move": {
+          "frames": 33,
+          "size": [
+            275,
+            319
+          ],
+          "anchor": [
+            142.0,
+            301.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "RM1903_5/move.apng",
+          "frames_dir": "RM1903_5/move/"
+        },
+        "pick": {
+          "frames": 33,
+          "size": [
+            299,
+            280
+          ],
+          "anchor": [
+            88.0,
+            126.2
+          ],
+          "loop": true,
+          "suggested_state": "busy/pick",
+          "apng": "RM1903_5/pick.apng",
+          "frames_dir": "RM1903_5/pick/"
+        },
+        "sit": {
+          "frames": 33,
+          "size": [
+            275,
+            306
+          ],
+          "anchor": [
+            142.0,
+            249.2
+          ],
+          "loop": true,
+          "suggested_state": "sit",
+          "apng": "RM1903_5/sit.apng",
+          "frames_dir": "RM1903_5/sit/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            274,
+            316
+          ],
+          "anchor": [
+            141.0,
+            297.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "RM1903_5/wait.apng",
+          "frames_dir": "RM1903_5/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            274,
+            321
+          ],
+          "anchor": [
+            141.0,
+            302.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "RM1903_5/thinking.apng",
+          "frames_dir": "RM1903_5/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            278,
+            320
+          ],
+          "anchor": [
+            143.0,
+            299.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "RM1903_5/inspect.apng",
+          "frames_dir": "RM1903_5/inspect/"
+        }
+      }
+    },
+    "RM1903_302": {
+      "animations": {
+        "lying": {
+          "frames": 67,
+          "size": [
+            290,
+            169
+          ],
+          "anchor": [
+            105.0,
+            138.2
+          ],
+          "loop": true,
+          "suggested_state": "sleep",
+          "apng": "RM1903_302/lying.apng",
+          "frames_dir": "RM1903_302/lying/"
+        },
+        "move": {
+          "frames": 33,
+          "size": [
+            218,
+            287
+          ],
+          "anchor": [
+            110.0,
+            269.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "RM1903_302/move.apng",
+          "frames_dir": "RM1903_302/move/"
+        },
+        "pick": {
+          "frames": 33,
+          "size": [
+            277,
+            286
+          ],
+          "anchor": [
+            127.0,
+            130.2
+          ],
+          "loop": true,
+          "suggested_state": "busy/pick",
+          "apng": "RM1903_302/pick.apng",
+          "frames_dir": "RM1903_302/pick/"
+        },
+        "sit": {
+          "frames": 33,
+          "size": [
+            218,
+            265
+          ],
+          "anchor": [
+            110.0,
+            208.2
+          ],
+          "loop": true,
+          "suggested_state": "sit",
+          "apng": "RM1903_302/sit.apng",
+          "frames_dir": "RM1903_302/sit/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            219,
+            280
+          ],
+          "anchor": [
+            110.0,
+            268.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "RM1903_302/wait.apng",
+          "frames_dir": "RM1903_302/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            219,
+            310
+          ],
+          "anchor": [
+            110.0,
+            298.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "RM1903_302/thinking.apng",
+          "frames_dir": "RM1903_302/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            223,
+            284
+          ],
+          "anchor": [
+            112.0,
+            270.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "RM1903_302/inspect.apng",
+          "frames_dir": "RM1903_302/inspect/"
+        }
+      }
+    },
+    "RM1903_1107": {
+      "animations": {
+        "3306_swim": {
+          "frames": 50,
+          "size": [
+            303,
+            287
+          ],
+          "anchor": [
+            100.0,
+            158.2
+          ],
+          "loop": true,
+          "suggested_state": "swim",
+          "apng": "RM1903_1107/3306_swim.apng",
+          "frames_dir": "RM1903_1107/3306_swim/"
+        },
+        "lying": {
+          "frames": 58,
+          "size": [
+            294,
+            201
+          ],
+          "anchor": [
+            109.0,
+            158.2
+          ],
+          "loop": true,
+          "suggested_state": "sleep",
+          "apng": "RM1903_1107/lying.apng",
+          "frames_dir": "RM1903_1107/lying/"
+        },
+        "move": {
+          "frames": 33,
+          "size": [
+            280,
+            317
+          ],
+          "anchor": [
+            148.0,
+            299.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "RM1903_1107/move.apng",
+          "frames_dir": "RM1903_1107/move/"
+        },
+        "pick": {
+          "frames": 33,
+          "size": [
+            306,
+            286
+          ],
+          "anchor": [
+            105.0,
+            131.2
+          ],
+          "loop": true,
+          "suggested_state": "busy/pick",
+          "apng": "RM1903_1107/pick.apng",
+          "frames_dir": "RM1903_1107/pick/"
+        },
+        "sit": {
+          "frames": 33,
+          "size": [
+            272,
+            283
+          ],
+          "anchor": [
+            146.0,
+            232.2
+          ],
+          "loop": true,
+          "suggested_state": "sit",
+          "apng": "RM1903_1107/sit.apng",
+          "frames_dir": "RM1903_1107/sit/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            271,
+            311
+          ],
+          "anchor": [
+            148.0,
+            297.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "RM1903_1107/wait.apng",
+          "frames_dir": "RM1903_1107/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            271,
+            320
+          ],
+          "anchor": [
+            148.0,
+            306.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "RM1903_1107/thinking.apng",
+          "frames_dir": "RM1903_1107/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            275,
+            315
+          ],
+          "anchor": [
+            150.0,
+            299.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "RM1903_1107/inspect.apng",
+          "frames_dir": "RM1903_1107/inspect/"
+        }
+      }
+    },
+    "RM1903_802": {
+      "animations": {
+        "lying": {
+          "frames": 58,
+          "size": [
+            259,
+            184
+          ],
+          "anchor": [
+            118.0,
+            132.2
+          ],
+          "loop": true,
+          "suggested_state": "sleep",
+          "apng": "RM1903_802/lying.apng",
+          "frames_dir": "RM1903_802/lying/"
+        },
+        "move": {
+          "frames": 33,
+          "size": [
+            183,
+            277
+          ],
+          "anchor": [
+            97.0,
+            258.2
+          ],
+          "loop": true,
+          "suggested_state": "walk",
+          "apng": "RM1903_802/move.apng",
+          "frames_dir": "RM1903_802/move/"
+        },
+        "pick": {
+          "frames": 33,
+          "size": [
+            261,
+            249
+          ],
+          "anchor": [
+            121.0,
+            113.2
+          ],
+          "loop": true,
+          "suggested_state": "busy/pick",
+          "apng": "RM1903_802/pick.apng",
+          "frames_dir": "RM1903_802/pick/"
+        },
+        "sit": {
+          "frames": 33,
+          "size": [
+            186,
+            264
+          ],
+          "anchor": [
+            103.0,
+            202.2
+          ],
+          "loop": true,
+          "suggested_state": "sit",
+          "apng": "RM1903_802/sit.apng",
+          "frames_dir": "RM1903_802/sit/"
+        },
+        "wait": {
+          "frames": 33,
+          "size": [
+            185,
+            273
+          ],
+          "anchor": [
+            102.0,
+            260.2
+          ],
+          "loop": true,
+          "suggested_state": "idle",
+          "apng": "RM1903_802/wait.apng",
+          "frames_dir": "RM1903_802/wait/"
+        },
+        "thinking": {
+          "frames": 33,
+          "size": [
+            185,
+            309
+          ],
+          "anchor": [
+            102.0,
+            296.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/working",
+          "synthesized": true,
+          "apng": "RM1903_802/thinking.apng",
+          "frames_dir": "RM1903_802/thinking/"
+        },
+        "inspect": {
+          "frames": 33,
+          "size": [
+            189,
+            277
+          ],
+          "anchor": [
+            104.0,
+            262.2
+          ],
+          "loop": true,
+          "suggested_state": "thinking/inspect",
+          "synthesized": true,
+          "apng": "RM1903_802/inspect.apng",
+          "frames_dir": "RM1903_802/inspect/"
+        }
+      }
+    }
+  }
+}
