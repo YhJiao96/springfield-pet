@@ -53,6 +53,34 @@ PROJECT_FILE = STATE_DIR / "claude_project"
 CODEX_STATE_FILE = STATE_DIR / "codex_state"
 CODEX_ACTIVITY_FILE = STATE_DIR / "codex_activity"
 CODEX_PROJECT_FILE = STATE_DIR / "codex_project"
+CLAUDE_ICON = STATE_DIR / "claude_icon.png"
+CODEX_ICON = STATE_DIR / "codex_icon.png"
+
+
+def _ensure_agent_icons():
+    """生成 Claude(橙色 sunburst)/ Codex(黑色 code 徽标)图标,供对话框显示。"""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    # Claude:橙色放射太阳花
+    pm = QtGui.QPixmap(44, 44); pm.fill(QtCore.Qt.transparent)
+    p = QtGui.QPainter(pm); p.setRenderHint(QtGui.QPainter.Antialiasing)
+    p.translate(22, 22)
+    p.setPen(QtGui.QPen(QtGui.QColor("#D97757"), 3.4, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap))
+    import math as _m
+    for i in range(11):
+        a = i * (2 * _m.pi / 11)
+        p.drawLine(QtCore.QPointF(_m.cos(a) * 5, _m.sin(a) * 5),
+                   QtCore.QPointF(_m.cos(a) * 18, _m.sin(a) * 18))
+    p.end(); pm.save(str(CLAUDE_ICON))
+    # Codex:黑色圆角方 + 白色 > 提示符
+    pm2 = QtGui.QPixmap(44, 44); pm2.fill(QtCore.Qt.transparent)
+    p = QtGui.QPainter(pm2); p.setRenderHint(QtGui.QPainter.Antialiasing)
+    p.setBrush(QtGui.QColor("#1b1b1f")); p.setPen(QtCore.Qt.NoPen)
+    p.drawRoundedRect(3, 3, 38, 38, 11, 11)
+    p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 3.4, QtCore.Qt.SolidLine,
+                        QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+    p.drawLine(15, 15, 24, 22); p.drawLine(24, 22, 15, 29)   # >
+    p.drawLine(27, 30, 32, 30)                                # _
+    p.end(); pm2.save(str(CODEX_ICON))
 
 # 助手脚本:被 Claude hook 调用,解析事件 JSON(stdin)-> 写状态/活动/项目名
 HOOK_HELPER_SRC = r'''#!/usr/bin/env python3
@@ -132,6 +160,7 @@ DEFAULT_STATE = {
     },
     "claude_cwd": str(Path.home()),
     "send_mode": "current",       # current=键入当前终端 / new=新终端
+    "send_agent": "claude",       # 新终端启动时用哪个 CLI:claude / codex
     "terminal_app": "Terminal",   # Terminal / iTerm2 / Code ...
     "auto_outfit": False,         # 定时自动换装
     "auto_outfit_min": 30,        # 换装间隔(分钟)
@@ -139,6 +168,7 @@ DEFAULT_STATE = {
     "music_loop": "all",          # off/all/one/shuffle
     "pet_scale": 1.0,             # 小人大小
     "banner_lines": 1,            # 状态对话框显示行数
+    "banners_collapsed": False,   # 状态对话框是否收起(只剩玻璃标签)
 }
 
 
@@ -258,35 +288,36 @@ def _esc(s):
 
 
 class AgentBanner(QtWidgets.QWidget):
-    """头顶状态对话框(显示专用,鼠标穿透,可多行):[●Agent] 项目 · 活动 + 转圈/✅。"""
-    def __init__(self, agent, color):
+    """头顶状态对话框(显示专用,鼠标穿透,可多行):[图标] 项目 · 活动 + 转圈/✅。"""
+    def __init__(self, icon_path):
         super().__init__(None)
-        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint
+                            | QtCore.Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
         self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating)
-        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)   # 由玻璃标签控制,自身不挡点击
-        self.agent = agent; self.color = color
-        self.label = QtWidgets.QLabel(self)
-        self.label.setTextFormat(QtCore.Qt.RichText)
-        self.label.setWordWrap(True)
-        self.label.setStyleSheet(
-            "QLabel{background:rgba(247,249,252,240);border-radius:18px;"
-            "padding:9px 16px;color:#2b3038;font-size:13px;}")
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        card = QtWidgets.QFrame(self); card.setObjectName("card")
+        card.setStyleSheet("#card{background:rgba(247,249,252,241);border-radius:18px;}")
+        self.icon = QtWidgets.QLabel()
+        self.icon.setPixmap(QtGui.QPixmap(str(icon_path)).scaled(
+            19, 19, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+        self.text = QtWidgets.QLabel()
+        self.text.setTextFormat(QtCore.Qt.RichText); self.text.setWordWrap(True)
+        self.text.setStyleSheet("color:#2b3038;font-size:13px;")
+        h = QtWidgets.QHBoxLayout(card); h.setContentsMargins(13, 8, 16, 8); h.setSpacing(8)
+        h.addWidget(self.icon, 0, QtCore.Qt.AlignVCenter); h.addWidget(self.text, 1)
+        outer = QtWidgets.QVBoxLayout(self); outer.setContentsMargins(0, 0, 0, 0); outer.addWidget(card)
 
     def update_status(self, proj, act, right, max_lines=1):
         one_line = max_lines <= 1
-        self.label.setWordWrap(not one_line)
-        width = 320 if one_line else 400
+        self.text.setWordWrap(not one_line)
+        self.text.setMaximumWidth(300 if one_line else 380)
         cap = 44 if one_line else max_lines * 42
         act = self._one(act)
         act = act if len(act) <= cap else act[:cap] + "…"
-        tag = f"<span style='color:{self.color};font-size:15px'>●</span> <b>{self.agent}</b>"
-        proj = f"{_esc(self._one(proj))}&nbsp;·&nbsp;" if proj else ""
-        html = (f"{tag}&nbsp;&nbsp;{proj}{_esc(act)}"
-                f"&nbsp;&nbsp;<span style='color:#8a93a0'>{right}</span>")
-        self.label.setMaximumWidth(width)
-        self.label.setText(html); self.label.adjustSize()
-        self.resize(self.label.size())
+        proj = f"<b>{_esc(self._one(proj))}</b>&nbsp;·&nbsp;" if proj else ""
+        self.text.setText(f"{proj}{_esc(act)}&nbsp;&nbsp;<span style='color:#8a93a0'>{right}</span>")
+        self.adjustSize(); self.resize(self.sizeHint())
         self.show()
 
     @staticmethod
@@ -303,7 +334,8 @@ class ToggleBadge(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__(None)
-        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint
+                            | QtCore.Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
         self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating)
         self.resize(30, 30)
@@ -486,10 +518,14 @@ class Companion(base.Pet):
         self.pending_ack = None       # "done":跑完待理会,持续提醒直到用户互动
         self.last_ack_remind = 0.0
         self.activity = ""; self.project = ""; self._spin_i = 0; self._claude_word = ""
-        self.banner_claude = AgentBanner("Claude", "#3b82f6")   # 蓝
-        self.banner_codex = AgentBanner("Codex", "#10b981")     # 绿
-        self.banners_collapsed = False
+        _ensure_agent_icons()
+        self.banner_claude = AgentBanner(CLAUDE_ICON)
+        self.banner_codex = AgentBanner(CODEX_ICON)
+        self.claude_linked = self.hooks_installed()
+        self.codex_linked = self.codex_bound()
+        self.banners_collapsed = bool(self.data.get("banners_collapsed", False))
         self.badge = ToggleBadge()
+        self.badge.expanded = not self.banners_collapsed
         self.badge.clicked.connect(self.toggle_banners)
 
         # 音乐播放器
@@ -678,51 +714,69 @@ class Companion(base.Pet):
 
     def toggle_banners(self):
         self.banners_collapsed = not self.banners_collapsed
+        self.data["banners_collapsed"] = self.banners_collapsed; self.save()
         self.badge.expanded = not self.banners_collapsed
         self.badge.update()
         self.refresh_banners()
 
+    def _toggle_link(self, agent, on):
+        if agent == "claude":
+            self.setup_claude_hooks() if on else self.remove_claude_hooks()
+            self.claude_linked = on
+        else:
+            self.setup_codex_notify() if on else self.remove_codex_notify()
+            self.codex_linked = on
+        self.refresh_banners()
+
     def _badge_pos(self):
+        # 玻璃标签在小人右上角;对话框底边高过整个小人
         g = self.frameGeometry(); s = self.scale
         cx = g.x() + int(base.ANCHOR_WX)
-        return cx, cx + int(70 * s), g.y() + int(base.ANCHOR_WY - 205 * s)
+        badge_x = cx + int(62 * s)
+        badge_y = g.y() + int(base.ANCHOR_WY - 200 * s)
+        banner_bottom = g.y() + int(base.ANCHOR_WY - 272 * s)
+        return cx, badge_x, badge_y, banner_bottom
 
     def refresh_banners(self):
         lines = int(self.data.get("banner_lines", 1))
-        cw = self._claude_word
-        c_active = cw in ("working", "waiting", "done")
-        try:
-            xw = CODEX_STATE_FILE.read_text().strip()
-            x_active = (time.time() - os.path.getmtime(CODEX_STATE_FILE)) < 15 \
-                and xw in ("working", "waiting", "done")
-        except Exception:
-            xw = ""; x_active = False
-
-        if not (c_active or x_active):
+        # 按"已接入的 AI"决定显示几个对话框(而非仅当前有活动时)
+        if not (self.claude_linked or self.codex_linked):
             self.badge.hide(); self.banner_claude.hide(); self.banner_codex.hide(); return
-
-        cx, bx, by = self._badge_pos()
-        self.badge.move(bx, by); self.badge.show(); self.badge.raise_()
+        cx, bx, by, bn_bottom = self._badge_pos()
+        self.badge.move(bx, by); self.badge.show()
         if self.banners_collapsed:
             self.banner_claude.hide(); self.banner_codex.hide(); return
 
-        if c_active:
-            self._fill(self.banner_claude, cw, self.project, self.activity, lines)
+        if self.claude_linked:
+            self._fill(self.banner_claude, self._claude_word or "idle", self.project, self.activity, lines)
         else:
             self.banner_claude.hide()
-        if x_active:
-            self._fill(self.banner_codex, xw, self._read_small(CODEX_PROJECT_FILE) or "Codex",
-                       self._read_small(CODEX_ACTIVITY_FILE), lines)
+        if self.codex_linked:
+            try:
+                xw = CODEX_STATE_FILE.read_text().strip()
+                fresh = (time.time() - os.path.getmtime(CODEX_STATE_FILE)) < 15
+            except Exception:
+                xw = ""; fresh = False
+            self._fill(self.banner_codex, xw if fresh else "idle",
+                       self._read_small(CODEX_PROJECT_FILE) or "Codex",
+                       self._read_small(CODEX_ACTIVITY_FILE) if fresh else "", lines)
         else:
             self.banner_codex.hide()
-        ybottom = by - 4
+        ybottom = bn_bottom
         for b in (self.banner_claude, self.banner_codex):
             if b.isVisible():
-                b.place(cx, ybottom); b.raise_(); ybottom -= b.height() + 6
+                b.place(cx, ybottom); ybottom -= b.height() + 6
 
     def _fill(self, banner, word, proj, act, lines):
-        right = self.SPIN[self._spin_i] if word == "working" else ("👀" if word == "waiting" else "✅")
-        act = act or {"working": "工作中", "waiting": "需要确认", "done": "完成"}.get(word, "")
+        if word == "working":
+            right = self.SPIN[self._spin_i]
+        elif word == "waiting":
+            right = "👀"
+        elif word == "done":
+            right = "✅"
+        else:
+            right = "·"   # idle/待命
+        act = act or {"working": "工作中", "waiting": "需要确认", "done": "完成"}.get(word, "待命中")
         banner.update_status(proj, act, right, lines)
 
     # ---------- 覆盖:行为受属性/状态影响 ----------
@@ -846,9 +900,9 @@ class Companion(base.Pet):
         self.update_mask()
         self.bubble.place_above(self)
         if self.badge.isVisible():
-            cx, bx, by = self._badge_pos()
+            cx, bx, by, bn_bottom = self._badge_pos()
             self.badge.move(bx, by)
-            ybottom = by - 4
+            ybottom = bn_bottom
             for b in (self.banner_claude, self.banner_codex):
                 if b.isVisible():
                     b.place(cx, ybottom); ybottom -= b.height() + 6
@@ -960,13 +1014,14 @@ class Companion(base.Pet):
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
 
     def send_new(self, text):
+        agent = self.data.get("send_agent", "claude")   # claude / codex
         cwd = self.data.get("claude_cwd", str(Path.home()))
-        cmd = f"cd {shlex.quote(cwd)} && claude {shlex.quote(text)}"
+        cmd = f"cd {shlex.quote(cwd)} && {agent} {shlex.quote(text)}"
         script = (f'tell application "Terminal" to do script {self._as_str(cmd)}\n'
                   'tell application "Terminal" to activate')
         try:
             subprocess.Popen(["osascript", "-e", script])
-            self.speak("已在新终端启动任务 🚀", 3); self.add_xp(3)
+            self.speak(f"已在新终端启动 {agent} 🚀", 3); self.add_xp(3)
         except Exception as ex:
             self.speak(f"启动失败: {ex}", 4)
 
@@ -986,14 +1041,14 @@ class Companion(base.Pet):
         m.addSeparator()
         m.addAction("💬 发指令给 Claude", self.open_prompt)
         m.addAction("🖥 呼出 Claude 窗口", self.raise_claude)
-        link = m.addMenu("🔗 状态联动(二选一)")
+        link = m.addMenu("🔗 状态联动(可多选)")
         ca = link.addAction("Claude Code")
-        ca.setCheckable(True); ca.setChecked(self.hooks_installed())
-        ca.triggered.connect(lambda on: self.setup_claude_hooks() if on else self.remove_claude_hooks())
+        ca.setCheckable(True); ca.setChecked(self.claude_linked)
+        ca.triggered.connect(lambda on: self._toggle_link("claude", on))
         if self.codex_installed():
             xa = link.addAction("Codex")
-            xa.setCheckable(True); xa.setChecked(self.codex_bound())
-            xa.triggered.connect(lambda on: self.setup_codex_notify() if on else self.remove_codex_notify())
+            xa.setCheckable(True); xa.setChecked(self.codex_linked)
+            xa.triggered.connect(lambda on: self._toggle_link("codex", on))
         else:
             na = link.addAction("Codex(未检测到)"); na.setEnabled(False)
         m.addSeparator()
@@ -1057,6 +1112,11 @@ class Companion(base.Pet):
             a = sm.addAction(label); a.setCheckable(True)
             a.setChecked(self.data.get("send_mode") == key)
             a.triggered.connect(lambda _=False, k=key: self.set_cfg("send_mode", k))
+        sa = cfg.addMenu("发送目标(新终端)")
+        for key, label in (("claude", "Claude"), ("codex", "Codex")):
+            a = sa.addAction(label); a.setCheckable(True)
+            a.setChecked(self.data.get("send_agent", "claude") == key)
+            a.triggered.connect(lambda _=False, k=key: self.set_cfg("send_agent", k))
         ta = cfg.addMenu("终端应用")
         for label, appname in (("Terminal", "Terminal"), ("iTerm2", "iTerm"),
                                ("VS Code", "Visual Studio Code")):
@@ -1349,10 +1409,35 @@ class Companion(base.Pet):
         self.save(); super().closeEvent(e)
 
 
+def _set_accessory_policy():
+    """把 App 设成 accessory:不抢键盘焦点、不占 Dock(桌宠必须)。源码运行时尤其需要。"""
+    if sys.platform != "darwin":
+        return
+    try:
+        import ctypes
+        import ctypes.util
+        objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
+        ctypes.cdll.LoadLibrary(ctypes.util.find_library("AppKit"))
+        objc.objc_getClass.restype = ctypes.c_void_p
+        objc.sel_registerName.restype = ctypes.c_void_p
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        cls = objc.objc_getClass(b"NSApplication")
+        app = objc.objc_msgSend(cls, objc.sel_registerName(b"sharedApplication"))
+        send = objc.objc_msgSend
+        send.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
+        send.restype = ctypes.c_bool
+        send(app, objc.sel_registerName(b"setActivationPolicy:"), 1)  # 1 = Accessory
+    except Exception:
+        pass
+
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(True)
-    c = Companion(); c.show(); c.raise_(); c.update_mask()
+    if os.environ.get("PET_ACCESSORY", "0") == "1":
+        _set_accessory_policy()
+    c = Companion(); c.show(); c.update_mask()
     sys.exit(app.exec())
 
 

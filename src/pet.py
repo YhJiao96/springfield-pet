@@ -20,7 +20,6 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 def _asset_root():
-    # PyInstaller 打包后素材在 _MEIPASS/pet_assets;开发时在 repo/assets/pet_assets
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS", ".")) / "pet_assets"
     here = Path(__file__).resolve().parent
@@ -91,8 +90,10 @@ class Pet(QtWidgets.QWidget):
         super().__init__()
         self.setWindowFlags(
             QtCore.Qt.FramelessWindowHint
-            | QtCore.Qt.WindowStaysOnTopHint)
+            | QtCore.Qt.WindowStaysOnTopHint
+            | QtCore.Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+        self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating)
         self.resize(WIN_W, WIN_H)
 
         self.manifest = json.load(open(ASSETS / "manifest.json"))
