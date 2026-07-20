@@ -60,26 +60,30 @@ CODEX_ICON = STATE_DIR / "codex_icon.png"
 def _ensure_agent_icons():
     """生成 Claude(橙色 sunburst)/ Codex(黑色 code 徽标)图标,供对话框显示。"""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    # Claude:橙色放射太阳花
+    # Claude:橙色八瓣花 + 白心
     pm = QtGui.QPixmap(44, 44); pm.fill(QtCore.Qt.transparent)
     p = QtGui.QPainter(pm); p.setRenderHint(QtGui.QPainter.Antialiasing)
     p.translate(22, 22)
-    p.setPen(QtGui.QPen(QtGui.QColor("#D97757"), 3.4, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap))
-    import math as _m
-    for i in range(11):
-        a = i * (2 * _m.pi / 11)
-        p.drawLine(QtCore.QPointF(_m.cos(a) * 5, _m.sin(a) * 5),
-                   QtCore.QPointF(_m.cos(a) * 18, _m.sin(a) * 18))
+    p.setPen(QtCore.Qt.NoPen); p.setBrush(QtGui.QColor("#D97757"))
+    for i in range(8):
+        p.save(); p.rotate(i * 45)
+        p.drawEllipse(QtCore.QRectF(-4.5, -19, 9, 16))
+        p.restore()
+    p.setBrush(QtGui.QColor("#ffffff")); p.drawEllipse(QtCore.QRectF(-5, -5, 10, 10))
     p.end(); pm.save(str(CLAUDE_ICON))
-    # Codex:黑色圆角方 + 白色 > 提示符
+    # Codex:黑色圆 + 白色六角星(通用 AI sparkle,原创,非 OpenAI 商标)
+    import math as _m
     pm2 = QtGui.QPixmap(44, 44); pm2.fill(QtCore.Qt.transparent)
     p = QtGui.QPainter(pm2); p.setRenderHint(QtGui.QPainter.Antialiasing)
     p.setBrush(QtGui.QColor("#1b1b1f")); p.setPen(QtCore.Qt.NoPen)
-    p.drawRoundedRect(3, 3, 38, 38, 11, 11)
-    p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 3.4, QtCore.Qt.SolidLine,
-                        QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-    p.drawLine(15, 15, 24, 22); p.drawLine(24, 22, 15, 29)   # >
-    p.drawLine(27, 30, 32, 30)                                # _
+    p.drawEllipse(3, 3, 38, 38)
+    p.translate(22, 22)
+    star = QtGui.QPolygonF()
+    for k in range(12):
+        ang = k * _m.pi / 6 - _m.pi / 2
+        r = 13.0 if k % 2 == 0 else 5.5
+        star.append(QtCore.QPointF(_m.cos(ang) * r, _m.sin(ang) * r))
+    p.setBrush(QtGui.QColor("#ffffff")); p.drawPolygon(star)
     p.end(); pm2.save(str(CODEX_ICON))
 
 # 助手脚本:被 Claude hook 调用,解析事件 JSON(stdin)-> 写状态/活动/项目名
@@ -97,13 +101,10 @@ def w(name, val):
     except Exception: pass
 cwd = data.get("cwd") or os.getcwd()
 w("claude_project", os.path.basename(str(cwd).rstrip("/")) or "Claude")
-w("claude_state", {"UserPromptSubmit": "working", "PreToolUse": "working",
-                   "Notification": "waiting", "Stop": "done",
-                   "SessionStart": "idle"}.get(event, "working"))
 def bn(p):
     try: return os.path.basename(str(p))
     except Exception: return str(p)
-act = ""
+state = "working"; act = ""
 if event == "PreToolUse":
     t = data.get("tool_name", ""); ti = data.get("tool_input", {}) or {}
     if t == "Read": act = "读取 " + bn(ti.get("file_path", ""))
@@ -114,8 +115,18 @@ if event == "PreToolUse":
     elif t in ("WebFetch", "WebSearch"): act = "联网: " + str(ti.get("query") or ti.get("url", ""))[:40]
     else: act = t or "工作中"
 elif event == "UserPromptSubmit": act = "思考中…"
-elif event == "Notification": act = "需要你确认"
+elif event == "Notification":
+    msg = str(data.get("message", "")).lower()
+    # 只有真的需要权限/授权/确认才算 waiting;单纯"等待输入"当空闲
+    if any(k in msg for k in ("permission", "approve", "approv", "authoriz",
+                              "confirm", "allow", "grant")):
+        state = "waiting"; act = "需要你确认/授权"
+    else:
+        state = "idle"; act = ""
+elif event == "SessionStart":
+    state = "idle"
 elif event == "Stop":
+    state = "done"
     act = "完成"
     tp = data.get("transcript_path", "")
     try:
@@ -131,6 +142,7 @@ elif event == "Stop":
             last = " ".join(last.split())
             if last: act = "完成:" + last[:60]
     except Exception: pass
+w("claude_state", state)
 w("claude_activity", act)
 '''
 # (事件, 写入的状态词, matcher 或 None)
@@ -732,9 +744,9 @@ class Companion(base.Pet):
         # 玻璃标签在小人右上角;对话框底边高过整个小人
         g = self.frameGeometry(); s = self.scale
         cx = g.x() + int(base.ANCHOR_WX)
-        badge_x = cx + int(62 * s)
-        badge_y = g.y() + int(base.ANCHOR_WY - 200 * s)
-        banner_bottom = g.y() + int(base.ANCHOR_WY - 272 * s)
+        badge_x = cx + int(92 * s)                          # 更靠右
+        badge_y = g.y() + int(base.ANCHOR_WY - 222 * s)     # 更靠上
+        banner_bottom = g.y() + int(base.ANCHOR_WY - 280 * s)
         return cx, badge_x, badge_y, banner_bottom
 
     def refresh_banners(self):
