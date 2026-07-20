@@ -27,6 +27,18 @@
 
 ---
 
+## 🎬 预览
+
+<p align="center">
+  <img src="docs/demo_hero.gif" width="230" alt="待机 / 走动 / 庆祝">
+</p>
+
+**5 套换装**（每套含战斗+休息动作，可定时自动切换）：
+
+<p align="center">
+  <img src="docs/demo_skins.gif" width="680" alt="默认 / 女巫 / 红斗篷 / 礼服 / 泳装">
+</p>
+
 ## ✨ 功能
 
 - **动画桌宠**：待机 / 走动 / 卖萌 / 坐躺休息，透明背景、始终置顶、按脚底锚点渲染不跳。
@@ -56,6 +68,11 @@ python run.py
 ```
 
 ## 🔗 联动 Claude Code 状态
+
+<p align="center">
+  <img src="docs/demo_magnifier.gif" width="200" alt="Claude 工作时举放大镜研究">
+  <br><sub>Claude 工作时，春田会举起放大镜「研究」</sub>
+</p>
 
 让桌宠跟随 Claude 的运行状态（开工 / 需要确认 / 跑完）自动反应。**装好 App 后照下面做一次即可，之后全自动。**
 
