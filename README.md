@@ -1,7 +1,7 @@
 # 🎀 Springfield Pet · 春田桌宠
 
 一只陪你写代码的桌面宠物 —— 以《少女前线》春田 (M1903) 的 Q 版形象为基础，
-基于 **PySide6** 的跨平台桌面伴侣，并能**联动 Claude Code / Codex 的运行状态**。
+基于 **PySide6** 的跨平台桌面伴侣，并能**联动 Claude Code / Codex（TBD） 的运行状态**。
 
 <p align="center">
   <img src="docs/icon-candidates/ic_pixel_mild.png" width="140" alt="Springfield Pet icon">
