@@ -102,6 +102,7 @@ class Pet(QtWidgets.QWidget):
         self.cur = None          # 当前 Anim
         self.frame_i = 0
         self.facing_right = True
+        self.scale = 1.0         # 整体缩放
 
         # 拖动
         self.dragging = False
@@ -222,10 +223,14 @@ class Pet(QtWidgets.QWidget):
         if not self.cur:
             return
         pm = self.cur.frames[self.frame_i]
+        s = self.scale
         ax, ay = self.cur.anchor
+        if s != 1.0:
+            pm = pm.scaled(max(1, int(pm.width() * s)), max(1, int(pm.height() * s)),
+                           QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
-        p.drawPixmap(int(ANCHOR_WX - ax), int(ANCHOR_WY - ay), pm)
+        p.drawPixmap(int(ANCHOR_WX - ax * s), int(ANCHOR_WY - ay * s), pm)
         p.end()
 
     # ---------- 交互 ----------

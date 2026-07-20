@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import shlex
 import subprocess
 import sys
@@ -54,6 +55,11 @@ HOOK_EVENTS = [
     ("SessionStart", "idle", None),
 ]
 
+# Codex 一键接入(通过 config.toml 的 notify;串联保留原有 notify)
+CODEX_CONFIG = Path.home() / ".codex" / "config.toml"
+CODEX_WRAPPER = STATE_DIR / "codex_notify.sh"
+CODEX_ORIG = STATE_DIR / "codex_orig_notify.sh"
+
 DEFAULT_STATE = {
     "stats": {"hunger": 80, "happiness": 80, "energy": 80, "xp": 0, "level": 1},
     "mood_log": [],
@@ -72,6 +78,7 @@ DEFAULT_STATE = {
     "auto_outfit_min": 30,        # 换装间隔(分钟)
     "music_folder": "",           # 音乐文件夹
     "music_loop": "all",          # off/all/one/shuffle
+    "pet_scale": 1.0,             # 小人大小
 }
 
 
@@ -328,6 +335,7 @@ class Companion(base.Pet):
         self.hover_timer.timeout.connect(self.show_status_hover)
         self.setMouseTracking(True)
         self._hit_key = None; self._hit_img = None   # 命中测试图像缓存(避免每次鼠标移动都 toImage)
+        self.scale = float(self.data.get("pet_scale", 1.0))
         self.external_state = None       # Claude 状态:working/waiting
         self.focus_end = 0
         self.last_water = time.time()
@@ -577,9 +585,11 @@ class Companion(base.Pet):
         key = (self.cur.name, self.frame_i)
         if key != self._hit_key:
             self._hit_img = pm.toImage(); self._hit_key = key
+        s = self.scale
         ax, ay = self.cur.anchor
-        fx = pos.x() - int(base.ANCHOR_WX - ax)
-        fy = pos.y() - int(base.ANCHOR_WY - ay)
+        # 反算到未缩放图像坐标(交互区域随大小变化)
+        fx = int((pos.x() - (base.ANCHOR_WX - ax * s)) / s)
+        fy = int((pos.y() - (base.ANCHOR_WY - ay * s)) / s)
         img = self._hit_img
         if 0 <= fx < img.width() and 0 <= fy < img.height():
             return QtGui.QColor(img.pixel(fx, fy)).alpha() > 30
@@ -610,8 +620,12 @@ class Companion(base.Pet):
         if not self.cur:
             return
         pm = self.cur.frames[self.frame_i]
+        s = self.scale
         ax, ay = self.cur.anchor
-        ox, oy = int(base.ANCHOR_WX - ax), int(base.ANCHOR_WY - ay)
+        if s != 1.0:   # 遮罩(可交互区域)随大小缩放
+            pm = pm.scaled(max(1, int(pm.width() * s)), max(1, int(pm.height() * s)),
+                           QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        ox, oy = int(base.ANCHOR_WX - ax * s), int(base.ANCHOR_WY - ay * s)
         m = pm.mask()
         if m is not None and not m.isNull():
             region = QtGui.QRegion(m); region.translate(ox, oy)
@@ -759,10 +773,16 @@ class Companion(base.Pet):
         m.addSeparator()
         m.addAction("💬 发指令给 Claude", self.open_prompt)
         m.addAction("🖥 呼出 Claude 窗口", self.raise_claude)
-        if self.hooks_installed():
-            m.addAction("🔗 已接入 Claude 状态 · 点此断开", self.remove_claude_hooks)
+        link = m.addMenu("🔗 状态联动(二选一)")
+        ca = link.addAction("Claude Code")
+        ca.setCheckable(True); ca.setChecked(self.hooks_installed())
+        ca.triggered.connect(lambda on: self.setup_claude_hooks() if on else self.remove_claude_hooks())
+        if self.codex_installed():
+            xa = link.addAction("Codex")
+            xa.setCheckable(True); xa.setChecked(self.codex_bound())
+            xa.triggered.connect(lambda on: self.setup_codex_notify() if on else self.remove_codex_notify())
         else:
-            m.addAction("🔗 一键接入 Claude 状态联动", self.setup_claude_hooks)
+            na = link.addAction("Codex(未检测到)"); na.setEnabled(False)
         m.addSeparator()
         m.addAction("🍚 喂食", self.feed)
         m.addAction("🎮 石头剪刀布", self.play_rps)
@@ -807,6 +827,12 @@ class Companion(base.Pet):
             a.setChecked(self.data.get("auto_outfit_min") == mins)
             a.triggered.connect(lambda _=False, x=mins: self.set_cfg("auto_outfit_min", x))
 
+        sz = m.addMenu("📏 大小")
+        for label, val in (("小 75%", 0.75), ("标准 100%", 1.0), ("大 125%", 1.25), ("超大 150%", 1.5)):
+            a = sz.addAction(label); a.setCheckable(True)
+            a.setChecked(abs(self.scale - val) < 0.01)
+            a.triggered.connect(lambda _=False, v=val: self.set_scale(v))
+
         cfg = m.addMenu("⚙️ 设置")
         sm = cfg.addMenu("发送方式")
         for key, label in (("current", "键入当前会话"), ("new", "新终端启动")):
@@ -829,6 +855,11 @@ class Companion(base.Pet):
     def set_cfg(self, key, val):
         self.data[key] = val; self.save()
         self.speak(f"{key} = {val}", 2)
+
+    def set_scale(self, s):
+        self.scale = float(s); self.data["pet_scale"] = float(s); self.save()
+        self.update_mask(); self.update()
+        self.speak(f"大小 {int(s * 100)}%", 2)
 
     # ---------- 音乐 ----------
     def choose_music(self):
@@ -920,6 +951,76 @@ class Companion(base.Pet):
         try:
             CLAUDE_SETTINGS.write_text(json.dumps(data, ensure_ascii=False, indent=2))
             self.speak("已断开 Claude 联动(新开会话生效)", 5)
+        except Exception as ex:
+            self.speak(f"写入失败: {ex}", 5)
+
+    # ---------- Codex 一键接入 ----------
+    def codex_installed(self):
+        return CODEX_CONFIG.exists()
+
+    def codex_bound(self):
+        try:
+            return "codex_notify.sh" in CODEX_CONFIG.read_text()
+        except Exception:
+            return False
+
+    def setup_codex_notify(self):
+        if not CODEX_CONFIG.exists():
+            self.speak("没找到 Codex 配置(~/.codex/config.toml)", 5); return
+        text = CODEX_CONFIG.read_text()
+        try:
+            (CODEX_CONFIG.parent / "config.toml.springfieldpet.bak").write_text(text)
+        except Exception:
+            pass
+        # 提取原有 notify 数组(非本项目的)以便串联转发
+        m = re.search(r'(?m)^\s*notify\s*=\s*(\[[^\n]*\])', text)
+        orig = []
+        if m:
+            try:
+                orig = json.loads(m.group(1))
+            except Exception:
+                orig = []
+        if orig and "codex_notify.sh" not in " ".join(map(str, orig)):
+            quoted = " ".join(shlex.quote(str(x)) for x in orig)
+            CODEX_ORIG.write_text(f"ORIG_NOTIFY=({quoted})\n")
+        # 写包装脚本:记状态 + 转发给原 notify
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        CODEX_WRAPPER.write_text(
+            "#!/bin/bash\n"
+            "mkdir -p ~/.springfield_pet\n"
+            "echo done > ~/.springfield_pet/claude_state\n"
+            f'SRC="{CODEX_ORIG}"\n'
+            'if [ -f "$SRC" ]; then source "$SRC"; "${ORIG_NOTIFY[@]}" "$@" 2>/dev/null; fi\n')
+        os.chmod(CODEX_WRAPPER, 0o755)
+        new_line = f'notify = ["bash", "{CODEX_WRAPPER}"]'
+        if re.search(r'(?m)^\s*notify\s*=', text):
+            text = re.sub(r'(?m)^\s*notify\s*=\s*\[[^\n]*\]', new_line, text, count=1)
+        else:
+            text = new_line + "\n" + text
+        try:
+            CODEX_CONFIG.write_text(text)
+            self.speak("已接入 Codex(跑完回合会庆祝)!已保留你的 Computer Use 🔗", 8,
+                       notify=True, title="Codex 联动已开启")
+        except Exception as ex:
+            self.speak(f"写入失败: {ex}", 5)
+
+    def remove_codex_notify(self):
+        if not CODEX_CONFIG.exists():
+            return
+        text = CODEX_CONFIG.read_text()
+        orig_line = None
+        if CODEX_ORIG.exists():
+            mm = re.search(r"ORIG_NOTIFY=\((.*)\)", CODEX_ORIG.read_text())
+            if mm:
+                parts = shlex.split(mm.group(1))
+                orig_line = "notify = [" + ", ".join(json.dumps(p) for p in parts) + "]"
+        if orig_line:
+            text = re.sub(r'(?m)^\s*notify\s*=\s*\[[^\n]*\]', orig_line, text, count=1)
+        else:
+            text = re.sub(r'(?m)^\s*notify\s*=\s*\[[^\n]*\]\n?', "", text, count=1)
+        try:
+            CODEX_CONFIG.write_text(text)
+            self.speak("已断开 Codex 联动(恢复原 notify)", 5)
         except Exception as ex:
             self.speak(f"写入失败: {ex}", 5)
 
