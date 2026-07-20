@@ -3,11 +3,29 @@
 一只陪你写代码的桌面宠物 —— 以《少女前线》春田 (M1903) 的 Q 版形象为基础，
 基于 **PySide6** 的跨平台桌面伴侣，并能**联动 Claude Code / Codex 的运行状态**。
 
-> 源码 MIT 许可；角色美术素材版权归原作者，仅供学习非商业使用，详见 [`ASSETS_NOTICE.md`](ASSETS_NOTICE.md)。
-
 <p align="center">
   <img src="docs/icon-candidates/ic_pixel_mild.png" width="140" alt="Springfield Pet icon">
 </p>
+
+---
+
+> ## ⚠️ 素材版权声明 / Asset Copyright Notice
+>
+> **本作所使用的像素小人素材及角色形象（春田 / Springfield / M1903）版权，均归
+> 上海散爆网络科技有限公司 / 云母组（MICA Team / SUNBORN Network）所有。**
+>
+> - 这些素材**仅供个人学习、研究与非商业用途**，本项目不主张任何版权、不用于任何商业目的。
+> - 素材来源：从《少女前线》游戏客户端解包出的 Spine 骨骼资源，经渲染为透明帧序列。
+>   建议有条件的使用者**自行从游戏客户端提取**对应素材。
+> - **若版权方（散爆网络 / 云母组）提出要求，本项目将立即删除全部相关素材。**
+>
+> The chibi character art of *Springfield / M1903* used here is copyright of
+> **SUNBORN Network / MICA Team** (*Girls' Frontline*), provided for personal,
+> non-commercial study only. Assets were extracted from the game client's Spine
+> resources. **They will be removed immediately upon the rights holder's request.**
+> See [`ASSETS_NOTICE.md`](ASSETS_NOTICE.md). The source code is under the MIT license.
+
+---
 
 ## ✨ 功能
 
