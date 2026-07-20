@@ -18,6 +18,7 @@ import os
 import random
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -45,7 +46,65 @@ CLAUDE_STATE_FILE = STATE_DIR / "claude_state"
 
 # Claude Code 一键接入
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
-HOOK_TAG = "springfield_pet/claude_state"   # 用于识别本项目写入的 hook
+HOOK_TAG = "claude_hook.py"                 # 用于识别本项目写入的 hook
+CLAUDE_HOOK_HELPER = STATE_DIR / "claude_hook.py"
+ACTIVITY_FILE = STATE_DIR / "claude_activity"
+PROJECT_FILE = STATE_DIR / "claude_project"
+CODEX_STATE_FILE = STATE_DIR / "codex_state"
+CODEX_ACTIVITY_FILE = STATE_DIR / "codex_activity"
+CODEX_PROJECT_FILE = STATE_DIR / "codex_project"
+
+# 助手脚本:被 Claude hook 调用,解析事件 JSON(stdin)-> 写状态/活动/项目名
+HOOK_HELPER_SRC = r'''#!/usr/bin/env python3
+import sys, json, os
+from pathlib import Path
+D = Path.home() / ".springfield_pet"
+try: D.mkdir(parents=True, exist_ok=True)
+except Exception: pass
+event = sys.argv[1] if len(sys.argv) > 1 else ""
+try: data = json.load(sys.stdin)
+except Exception: data = {}
+def w(name, val):
+    try: (D / name).write_text(str(val))
+    except Exception: pass
+cwd = data.get("cwd") or os.getcwd()
+w("claude_project", os.path.basename(str(cwd).rstrip("/")) or "Claude")
+w("claude_state", {"UserPromptSubmit": "working", "PreToolUse": "working",
+                   "Notification": "waiting", "Stop": "done",
+                   "SessionStart": "idle"}.get(event, "working"))
+def bn(p):
+    try: return os.path.basename(str(p))
+    except Exception: return str(p)
+act = ""
+if event == "PreToolUse":
+    t = data.get("tool_name", ""); ti = data.get("tool_input", {}) or {}
+    if t == "Read": act = "读取 " + bn(ti.get("file_path", ""))
+    elif t in ("Edit", "Write", "NotebookEdit"): act = "编辑 " + bn(ti.get("file_path", ""))
+    elif t == "Bash": act = "运行: " + str(ti.get("command", ""))[:48]
+    elif t in ("Grep", "Glob"): act = "搜索: " + str(ti.get("pattern", ""))[:40]
+    elif t == "Task": act = "子任务: " + str(ti.get("description", ""))[:36]
+    elif t in ("WebFetch", "WebSearch"): act = "联网: " + str(ti.get("query") or ti.get("url", ""))[:40]
+    else: act = t or "工作中"
+elif event == "UserPromptSubmit": act = "思考中…"
+elif event == "Notification": act = "需要你确认"
+elif event == "Stop":
+    act = "完成"
+    tp = data.get("transcript_path", "")
+    try:
+        if tp and os.path.exists(tp):
+            last = ""
+            for line in open(tp, encoding="utf-8"):
+                try: o = json.loads(line)
+                except Exception: continue
+                if o.get("type") == "assistant":
+                    for blk in (o.get("message", {}).get("content") or []):
+                        if isinstance(blk, dict) and blk.get("type") == "text" and blk.get("text"):
+                            last = blk["text"]
+            last = " ".join(last.split())
+            if last: act = "完成:" + last[:60]
+    except Exception: pass
+w("claude_activity", act)
+'''
 # (事件, 写入的状态词, matcher 或 None)
 HOOK_EVENTS = [
     ("UserPromptSubmit", "working", None),
@@ -79,6 +138,7 @@ DEFAULT_STATE = {
     "music_folder": "",           # 音乐文件夹
     "music_loop": "all",          # off/all/one/shuffle
     "pet_scale": 1.0,             # 小人大小
+    "banner_lines": 1,            # 状态对话框显示行数
 }
 
 
@@ -191,6 +251,85 @@ class StatusPanel(QtWidgets.QWidget):
         x = g.x() + base.ANCHOR_WX + 70
         y = g.y() + base.ANCHOR_WY - 180
         self.move(int(x), int(y)); self.show(); self.raise_()
+
+
+def _esc(s):
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+class AgentBanner(QtWidgets.QWidget):
+    """头顶状态对话框(显示专用,鼠标穿透,可多行):[●Agent] 项目 · 活动 + 转圈/✅。"""
+    def __init__(self, agent, color):
+        super().__init__(None)
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+        self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating)
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)   # 由玻璃标签控制,自身不挡点击
+        self.agent = agent; self.color = color
+        self.label = QtWidgets.QLabel(self)
+        self.label.setTextFormat(QtCore.Qt.RichText)
+        self.label.setWordWrap(True)
+        self.label.setStyleSheet(
+            "QLabel{background:rgba(247,249,252,240);border-radius:18px;"
+            "padding:9px 16px;color:#2b3038;font-size:13px;}")
+
+    def update_status(self, proj, act, right, max_lines=1):
+        one_line = max_lines <= 1
+        self.label.setWordWrap(not one_line)
+        width = 320 if one_line else 400
+        cap = 44 if one_line else max_lines * 42
+        act = self._one(act)
+        act = act if len(act) <= cap else act[:cap] + "…"
+        tag = f"<span style='color:{self.color};font-size:15px'>●</span> <b>{self.agent}</b>"
+        proj = f"{_esc(self._one(proj))}&nbsp;·&nbsp;" if proj else ""
+        html = (f"{tag}&nbsp;&nbsp;{proj}{_esc(act)}"
+                f"&nbsp;&nbsp;<span style='color:#8a93a0'>{right}</span>")
+        self.label.setMaximumWidth(width)
+        self.label.setText(html); self.label.adjustSize()
+        self.resize(self.label.size())
+        self.show()
+
+    @staticmethod
+    def _one(s):
+        return " ".join(str(s).split())
+
+    def place(self, cx, ybottom):
+        self.move(int(cx - self.width() / 2), int(ybottom - self.height()))
+
+
+class ToggleBadge(QtWidgets.QWidget):
+    """小人右上角的玻璃质感圆形标签,上/下箭头切换展开/收起对话框。"""
+    clicked = QtCore.Signal()
+
+    def __init__(self):
+        super().__init__(None)
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+        self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating)
+        self.resize(30, 30)
+        self.expanded = True
+
+    def paintEvent(self, _):
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.Antialiasing)
+        # 玻璃圆:半透明白 + 细边 + 高光
+        p.setBrush(QtGui.QColor(255, 255, 255, 180))
+        p.setPen(QtGui.QPen(QtGui.QColor(150, 160, 175, 170), 1.4))
+        p.drawEllipse(2, 2, 26, 26)
+        p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 200), 1))
+        p.drawArc(4, 3, 22, 22, 40 * 16, 110 * 16)
+        # 箭头:展开时朝上(∧,点了收起),收起时朝下(∨,点了展开)
+        p.setPen(QtGui.QPen(QtGui.QColor(70, 80, 96), 2.2, QtCore.Qt.SolidLine,
+                            QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+        cx, cy = 15, 15
+        if self.expanded:
+            p.drawLine(cx - 5, cy + 2, cx, cy - 3); p.drawLine(cx, cy - 3, cx + 5, cy + 2)
+        else:
+            p.drawLine(cx - 5, cy - 2, cx, cy + 3); p.drawLine(cx, cy + 3, cx + 5, cy - 2)
+        p.end()
+
+    def mousePressEvent(self, e):
+        self.clicked.emit(); e.accept()
 
 
 class MiniPlayer(QtWidgets.QWidget):
@@ -346,6 +485,12 @@ class Companion(base.Pet):
         self.last_wait_remind = 0.0
         self.pending_ack = None       # "done":跑完待理会,持续提醒直到用户互动
         self.last_ack_remind = 0.0
+        self.activity = ""; self.project = ""; self._spin_i = 0; self._claude_word = ""
+        self.banner_claude = AgentBanner("Claude", "#3b82f6")   # 蓝
+        self.banner_codex = AgentBanner("Codex", "#10b981")     # 绿
+        self.banners_collapsed = False
+        self.badge = ToggleBadge()
+        self.badge.clicked.connect(self.toggle_banners)
 
         # 音乐播放器
         self.player = MiniPlayer(loop=self.data.get("music_loop", "all"))
@@ -463,16 +608,15 @@ class Companion(base.Pet):
         # 兜底轮询 Claude 状态(watcher 有时漏)
         self.read_claude_state()
 
-        # 仍在等待确认 -> 每 18 秒再提醒一次
-        if self.external_state == "waiting" and now - self.last_wait_remind >= 18:
-            self.last_wait_remind = now
-            self.speak("Claude 还在等你确认哦 👀", 5, notify=True, title="需要操作")
-
-        # 跑完待理会 -> 每 12 秒持续提醒,直到用户互动
-        if self.pending_ack == "done" and now - self.last_ack_remind >= 12:
+        # 待理会 -> 每 13 秒持续提醒,直到点击(ack)或状态改变(在终端继续)
+        if self.pending_ack and now - self.last_ack_remind >= 13:
             self.last_ack_remind = now
-            self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
-            self.speak("跑完啦,回来看看我嘛~ ✅", 5, notify=True, title="运行完毕")
+            if self.pending_ack == "waiting":
+                self.set_anim("spine", fallbacks=("thinking", "wait"))
+                self.speak("还在等你确认/授权哦 👀", 5, notify=True, title="需要操作")
+            else:   # done
+                self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
+                self.speak("跑完啦,回来看看我嘛~ ✅", 5, notify=True, title="运行完毕")
 
         # 状态栏可见时刷新内容
         if self.status_panel.isVisible():
@@ -492,32 +636,94 @@ class Companion(base.Pet):
         self.set_anim("victory" if not self.skin.startswith("R") else "pick", fallbacks=("wait",))
 
     # ---------- Claude 状态联动 ----------
+    SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    @staticmethod
+    def _read_small(p):
+        try:
+            return p.read_text().strip()
+        except Exception:
+            return ""
+
     def read_claude_state(self, *_):
+        # 驱动小人动作 + 行为(仅 Claude,细粒度)
         try:
             word = CLAUDE_STATE_FILE.read_text().strip()
         except Exception:
-            return
-        # watcher 在文件重写后可能失效,重新添加
+            word = ""
+        self.activity = self._read_small(ACTIVITY_FILE)
+        self.project = self._read_small(PROJECT_FILE)
         if str(CLAUDE_STATE_FILE) not in self.watcher.files():
             self.watcher.addPath(str(CLAUDE_STATE_FILE))
-        if word == self._last_claude:
-            return
-        self._last_claude = word
-        if word == "working":
-            self.external_state = "working"; self.pending_ack = None
-            self.speak("Claude 开工啦,我盯着 🔍", 3)
-        elif word == "waiting":
-            self.external_state = "waiting"; self.pending_ack = None
-            self.waiting_since = time.time(); self.last_wait_remind = time.time()
-            self.set_anim("spine", fallbacks=("thinking", "wait"))
-            self.speak("Claude 需要你确认一下 👀", 6, notify=True, title="需要操作")
-        elif word == "done":
-            self.external_state = None
-            self.pending_ack = "done"; self.last_ack_remind = time.time()
-            self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
-            self.speak("Claude 跑完啦 ✅ 点我一下就好~", 6, notify=True, title="运行完毕")
+        if word and word != self._last_claude:
+            self._last_claude = word
+            if word == "working":
+                self.external_state = "working"; self.pending_ack = None
+            elif word == "waiting":
+                self.external_state = "waiting"
+                self.pending_ack = "waiting"; self.last_ack_remind = time.time()
+                self.set_anim("spine", fallbacks=("thinking", "wait"))
+                self.speak("需要你确认/授权 👀 处理完点我一下", 6, notify=True, title="需要操作")
+            elif word == "done":
+                self.external_state = None
+                self.pending_ack = "done"; self.last_ack_remind = time.time()
+                self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
+                # 结果显示在横幅里,这里不再冒重复气泡
+                self.notify("运行完毕", (self.activity or "完成"))
+            else:
+                self.external_state = None; self.pending_ack = None
+        self._spin_i = (self._spin_i + 1) % len(self.SPIN)
+        self._claude_word = word
+        self.refresh_banners()
+
+    def toggle_banners(self):
+        self.banners_collapsed = not self.banners_collapsed
+        self.badge.expanded = not self.banners_collapsed
+        self.badge.update()
+        self.refresh_banners()
+
+    def _badge_pos(self):
+        g = self.frameGeometry(); s = self.scale
+        cx = g.x() + int(base.ANCHOR_WX)
+        return cx, cx + int(70 * s), g.y() + int(base.ANCHOR_WY - 205 * s)
+
+    def refresh_banners(self):
+        lines = int(self.data.get("banner_lines", 1))
+        cw = self._claude_word
+        c_active = cw in ("working", "waiting", "done")
+        try:
+            xw = CODEX_STATE_FILE.read_text().strip()
+            x_active = (time.time() - os.path.getmtime(CODEX_STATE_FILE)) < 15 \
+                and xw in ("working", "waiting", "done")
+        except Exception:
+            xw = ""; x_active = False
+
+        if not (c_active or x_active):
+            self.badge.hide(); self.banner_claude.hide(); self.banner_codex.hide(); return
+
+        cx, bx, by = self._badge_pos()
+        self.badge.move(bx, by); self.badge.show(); self.badge.raise_()
+        if self.banners_collapsed:
+            self.banner_claude.hide(); self.banner_codex.hide(); return
+
+        if c_active:
+            self._fill(self.banner_claude, cw, self.project, self.activity, lines)
         else:
-            self.external_state = None; self.pending_ack = None
+            self.banner_claude.hide()
+        if x_active:
+            self._fill(self.banner_codex, xw, self._read_small(CODEX_PROJECT_FILE) or "Codex",
+                       self._read_small(CODEX_ACTIVITY_FILE), lines)
+        else:
+            self.banner_codex.hide()
+        ybottom = by - 4
+        for b in (self.banner_claude, self.banner_codex):
+            if b.isVisible():
+                b.place(cx, ybottom); b.raise_(); ybottom -= b.height() + 6
+
+    def _fill(self, banner, word, proj, act, lines):
+        right = self.SPIN[self._spin_i] if word == "working" else ("👀" if word == "waiting" else "✅")
+        act = act or {"working": "工作中", "waiting": "需要确认", "done": "完成"}.get(word, "")
+        banner.update_status(proj, act, right, lines)
 
     # ---------- 覆盖:行为受属性/状态影响 ----------
     def behave(self):
@@ -639,6 +845,13 @@ class Companion(base.Pet):
         super().tick()
         self.update_mask()
         self.bubble.place_above(self)
+        if self.badge.isVisible():
+            cx, bx, by = self._badge_pos()
+            self.badge.move(bx, by)
+            ybottom = by - 4
+            for b in (self.banner_claude, self.banner_codex):
+                if b.isVisible():
+                    b.place(cx, ybottom); ybottom -= b.height() + 6
         if self.status_panel.isVisible():
             g = self.frameGeometry()
             self.status_panel.move(int(g.x() + base.ANCHOR_WX + 70),
@@ -832,6 +1045,11 @@ class Companion(base.Pet):
             a = sz.addAction(label); a.setCheckable(True)
             a.setChecked(abs(self.scale - val) < 0.01)
             a.triggered.connect(lambda _=False, v=val: self.set_scale(v))
+        bl = m.addMenu("💬 对话框行数")
+        for n in (1, 3, 5, 10):
+            a = bl.addAction(f"{n} 行"); a.setCheckable(True)
+            a.setChecked(int(self.data.get("banner_lines", 1)) == n)
+            a.triggered.connect(lambda _=False, x=n: self.set_cfg("banner_lines", x))
 
         cfg = m.addMenu("⚙️ 设置")
         sm = cfg.addMenu("发送方式")
@@ -887,8 +1105,11 @@ class Companion(base.Pet):
 
     # ---------- Claude Code 一键接入 ----------
     @staticmethod
-    def _hook_cmd(state):
-        return f"mkdir -p ~/.springfield_pet && echo {state} > ~/.springfield_pet/claude_state"
+    def _hook_python():
+        exe = sys.executable
+        if os.path.basename(exe).lower().startswith("python"):
+            return exe
+        return shutil.which("python3") or "python3"
 
     def hooks_installed(self):
         try:
@@ -903,11 +1124,18 @@ class Companion(base.Pet):
         return False
 
     def setup_claude_hooks(self):
+        # 写助手脚本(解析事件 -> 状态/活动/项目名)
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            CLAUDE_HOOK_HELPER.write_text(HOOK_HELPER_SRC)
+            os.chmod(CLAUDE_HOOK_HELPER, 0o755)
+        except Exception as ex:
+            self.speak(f"写助手脚本失败: {ex}", 5); return
+        py = self._hook_python()
         try:
             data = json.loads(CLAUDE_SETTINGS.read_text()) if CLAUDE_SETTINGS.exists() else {}
         except Exception:
             data = {}
-        # 备份原文件
         if CLAUDE_SETTINGS.exists():
             try:
                 (CLAUDE_SETTINGS.parent / "settings.json.springfieldpet.bak").write_text(
@@ -916,13 +1144,14 @@ class Companion(base.Pet):
                 pass
         hooks = data.setdefault("hooks", {})
         added = 0
-        for event, state, matcher in HOOK_EVENTS:
+        for event, _state, matcher in HOOK_EVENTS:
+            cmd = f"{shlex.quote(py)} {shlex.quote(str(CLAUDE_HOOK_HELPER))} {event}"
             entries = hooks.setdefault(event, [])
             present = any(HOOK_TAG in h.get("command", "")
                           for e in entries if isinstance(e, dict)
                           for h in e.get("hooks", []))
             if not present:
-                entry = {"hooks": [{"type": "command", "command": self._hook_cmd(state)}]}
+                entry = {"hooks": [{"type": "command", "command": cmd}]}
                 if matcher:
                     entry["matcher"] = matcher
                 entries.append(entry); added += 1
@@ -932,10 +1161,10 @@ class Companion(base.Pet):
         except Exception as ex:
             self.speak(f"写入失败: {ex}", 5); return
         if added:
-            self.speak(f"已接入 Claude Code(+{added} hooks)!新开会话即生效 🔗", 8,
+            self.speak(f"已接入 Claude Code(+{added})!头顶会显示项目+活动。新开会话生效 🔗", 8,
                        notify=True, title="Claude 联动已开启")
         else:
-            self.speak("已经接入过啦,无需重复 🔗", 4)
+            self.speak("已经接入过啦 🔗", 4)
 
     def remove_claude_hooks(self):
         try:
@@ -983,12 +1212,27 @@ class Companion(base.Pet):
         if orig and "codex_notify.sh" not in " ".join(map(str, orig)):
             quoted = " ".join(shlex.quote(str(x)) for x in orig)
             CODEX_ORIG.write_text(f"ORIG_NOTIFY=({quoted})\n")
-        # 写包装脚本:记状态 + 转发给原 notify
+        # 写包装脚本:记 Codex 状态(独立文件,横幅区分 Claude/Codex)+ 转发原 notify
         STATE_DIR.mkdir(parents=True, exist_ok=True)
+        py = self._hook_python()
         CODEX_WRAPPER.write_text(
             "#!/bin/bash\n"
             "mkdir -p ~/.springfield_pet\n"
-            "echo done > ~/.springfield_pet/claude_state\n"
+            f'D=~/.springfield_pet\n'
+            'echo done > "$D/codex_state"\n'
+            # 用 python 从 notify JSON(最后一个参数)提取最后消息作为结果开头
+            f'{shlex.quote(py)} - "$@" <<\'PYEOF\' 2>/dev/null || echo 回合完成 > "$D/codex_activity"\n'
+            "import sys, json, os\n"
+            "from pathlib import Path\n"
+            "D = Path.home()/'.springfield_pet'\n"
+            "try: d = json.loads(sys.argv[-1])\n"
+            "except Exception: d = {}\n"
+            "msg = d.get('last-assistant-message') or d.get('last_assistant_message') or ''\n"
+            "msg = ' '.join(str(msg).split())\n"
+            "(D/'codex_activity').write_text(('完成:'+msg[:60]) if msg else '回合完成')\n"
+            "cwd = d.get('cwd') or ''\n"
+            "(D/'codex_project').write_text(os.path.basename(str(cwd).rstrip('/')) or 'Codex')\n"
+            "PYEOF\n"
             f'SRC="{CODEX_ORIG}"\n'
             'if [ -f "$SRC" ]; then source "$SRC"; "${ORIG_NOTIFY[@]}" "$@" 2>/dev/null; fi\n')
         os.chmod(CODEX_WRAPPER, 0o755)
