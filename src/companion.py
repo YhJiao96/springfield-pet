@@ -61,10 +61,7 @@ CODEX_HOOK_HELPER = STATE_DIR / "codex_hook.py"
 CODEX_SESSION_DIR = STATE_DIR / "codex_sessions"
 CODEX_POLL_MS = 250
 
-# 系统通知的"归属 App"。osascript 发的通知会被系统算在「脚本编辑器」头上,
-# 点一下就打开脚本编辑器+选文件窗口;改成 tell 某个 App 发通知,通知就带那个
-# App 的图标,点击直接把它唤到前台。
-PET_BUNDLE_ID = "dev.springfieldpet.app"
+# 通知点击后要唤起的 Codex App(按优先级探测)
 CODEX_APP_BUNDLES = ("com.openai.codex", "com.openai.chat")
 
 # 旧版 notify 联动留下的粗粒度文件(仅在没有任何 v2 session 时作兜底)
@@ -555,13 +552,16 @@ class Companion(base.Pet):
         self.pending_ack_src = None   # "claude"/"codex":谁挂的,避免互相覆盖
         self.last_ack_remind = 0.0
         self.activity = ""; self.project = ""; self._spin_i = 0; self._claude_word = ""
-        self._notify_owner_cache = {}    # target -> AppleScript 指示符(探测一次就够)
+        self._notify_owner_cache = {}    # 探测到的 Codex bundle id(探测一次就够)
+        self.tray = None                 # 菜单栏图标:通知由它发,点击才归我们管
+        self._notify_target = None       # 最近一条通知该唤起谁
 
         # Codex 实时状态(v2 hooks)
         self.codex_rec = None            # 当前展示的 session 记录
         self._codex_key = None           # (session_id, sequence, effective_state)
         self._codex_celebrated = None    # 已庆祝过的 (session_id, sequence)
         _ensure_agent_icons()
+        self._setup_tray()
         self.banner_claude = AgentBanner(CLAUDE_ICON)
         self.banner_codex = AgentBanner(CODEX_ICON)
         self.claude_linked = self.hooks_installed()
@@ -637,50 +637,74 @@ class Companion(base.Pet):
         # AppleScript 字符串字面量(UTF-8 直传,不用 \u 转义)
         return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-    @staticmethod
-    def _bundle_installed(bundle_id):
-        """这个 bundle id 装了没。用 `path to application id`(运行期解析,
-        缺失只是 rc=1),不能把 id 直接写进主脚本 —— `application id` 是编译期
-        解析的,写一个不存在的 id 会让整段脚本编译失败,通知一条都发不出来。"""
+    # ---------- 系统通知(自己发,点击自己接管) ----------
+    # 用 osascript 发通知,系统会把它算在「脚本编辑器」头上,点一下就弹出脚本
+    # 编辑器和选文件窗口。`tell application X to display notification` 这个老
+    # 技巧在新版 macOS 上已经不改变归属了(实测无效)。所以改由桌宠进程自己经
+    # QSystemTrayIcon 发 —— 通知归属就是桌宠,点击走 messageClicked,我们自己
+    # 决定唤起谁。
+    def _pet_icon(self):
+        """拿 wait 第一帧裁掉透明边当托盘图标。"""
+        anim = self.anims.get("wait")
+        if not anim or not anim.frames:
+            return QtGui.QIcon(str(CLAUDE_ICON))
+        pm = anim.frames[0]
+        mask = pm.mask()
+        rect = QtGui.QRegion(mask).boundingRect() if mask and not mask.isNull() else pm.rect()
+        if rect.isEmpty():
+            rect = pm.rect()
+        return QtGui.QIcon(pm.copy(rect).scaled(
+            44, 44, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+
+    def _setup_tray(self):
+        if not QtWidgets.QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        self.tray = QtWidgets.QSystemTrayIcon(self._pet_icon(), self)
+        self.tray.setToolTip("春田桌宠")
+        self.tray.messageClicked.connect(self._on_notification_clicked)
+        if self.data.get("notify_enabled", True):
+            self.tray.show()
+
+    def _on_notification_clicked(self):
+        """点了通知:当作已理会,并把对应的终端 / Codex 窗口唤到前台。"""
+        self.ack()
+        target = self._notify_target
         try:
-            return subprocess.run(
-                ["osascript", "-e", f'path to application id "{bundle_id}"'],
-                capture_output=True, timeout=5).returncode == 0
+            if target == "codex":
+                bundle = self._codex_bundle()
+                if bundle:
+                    subprocess.Popen(["open", "-b", bundle])
+            elif target == "claude":
+                subprocess.Popen(["open", "-a", self.data.get("terminal_app", "Terminal")])
         except Exception:
-            return False
+            pass
 
-    def _notify_owner(self, target):
-        """通知该"挂"在哪个 App 名下 —— 决定点通知时被唤到前台的是谁。
-
-        返回一个 AppleScript application 指示符,或 None(不归属)。
-        探测结果缓存,不会每条通知都去问一次 LaunchServices。
-        """
-        if target == "claude":
-            return self._as_str(self.data.get("terminal_app", "Terminal"))
-        if target == "codex":
-            bundles = CODEX_APP_BUNDLES
-        elif getattr(sys, "frozen", False):
-            # 喝水/提醒/专注这类跟 AI 无关的:挂在桌宠自己名下,点了就是关掉
-            bundles = (PET_BUNDLE_ID,)
-        else:
-            return None                     # 源码运行时没有 App bundle 可挂
-        if target not in self._notify_owner_cache:
-            found = next((b for b in bundles if self._bundle_installed(b)), None)
-            self._notify_owner_cache[target] = f'id "{found}"' if found else None
-        return self._notify_owner_cache[target]
+    def _codex_bundle(self):
+        """探测装了哪个 Codex bundle id(结果缓存)。"""
+        if "codex" not in self._notify_owner_cache:
+            found = None
+            for b in CODEX_APP_BUNDLES:
+                try:
+                    if subprocess.run(["osascript", "-e", f'path to application id "{b}"'],
+                                      capture_output=True, timeout=5).returncode == 0:
+                        found = b; break
+                except Exception:
+                    pass
+            self._notify_owner_cache["codex"] = found
+        return self._notify_owner_cache["codex"]
 
     def notify(self, title, text, target=None):
         """target: None / "claude" / "codex" —— 点通知时唤起哪个 App。"""
         if not self.data.get("notify_enabled", True):
             return
-        script = f'display notification {self._as_str(text)} with title {self._as_str(title)}'
-        owner = self._notify_owner(target)
-        if owner:
-            # 归属失败(App 被删/没授权)也要保证通知还能发出去
-            script = (f"try\nwith timeout of 3 seconds\ntell application {owner} to {script}\n"
-                      f"end timeout\non error\n{script}\nend try")
+        self._notify_target = target
+        if self.tray is not None and self.tray.isVisible():
+            self.tray.showMessage(title, text, QtWidgets.QSystemTrayIcon.Information, 8000)
+            return
+        # 没有托盘可用时兜底(这条点了还是会开脚本编辑器,macOS 的老毛病)
         try:
-            subprocess.Popen(["osascript", "-e", script])
+            subprocess.Popen(["osascript", "-e",
+                f'display notification {self._as_str(text)} with title {self._as_str(title)}'])
         except Exception:
             pass
 
@@ -1682,9 +1706,12 @@ class Companion(base.Pet):
 
     def toggle_notify(self, checked):
         self.data["notify_enabled"] = checked; self.save()
+        if self.tray is not None:
+            # 菜单栏图标只在开着通知时出现(通知必须由它发才不归脚本编辑器)
+            self.tray.show() if checked else self.tray.hide()
         # 关的时候不能再走 notify(),否则这条提示自己就被吞了
         self.speak("系统通知已开启 🔔(点通知会唤起对应窗口)" if checked
-                   else "系统通知已关闭 🔕(只留头顶气泡)", 5)
+                   else "系统通知已关闭 🔕(只留头顶气泡,菜单栏图标也收起)", 5)
 
     def toggle_water(self, checked):
         self.data["water_enabled"] = checked; self.last_water = time.time(); self.save()
