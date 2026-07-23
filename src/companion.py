@@ -61,6 +61,12 @@ CODEX_HOOK_HELPER = STATE_DIR / "codex_hook.py"
 CODEX_SESSION_DIR = STATE_DIR / "codex_sessions"
 CODEX_POLL_MS = 250
 
+# 系统通知的"归属 App"。osascript 发的通知会被系统算在「脚本编辑器」头上,
+# 点一下就打开脚本编辑器+选文件窗口;改成 tell 某个 App 发通知,通知就带那个
+# App 的图标,点击直接把它唤到前台。
+PET_BUNDLE_ID = "dev.springfieldpet.app"
+CODEX_APP_BUNDLES = ("com.openai.codex", "com.openai.chat")
+
 # 旧版 notify 联动留下的粗粒度文件(仅在没有任何 v2 session 时作兜底)
 CODEX_STATE_FILE = STATE_DIR / "codex_state"
 CODEX_ACTIVITY_FILE = STATE_DIR / "codex_activity"
@@ -191,6 +197,7 @@ DEFAULT_STATE = {
     "pet_scale": 1.0,             # 小人大小
     "banner_lines": 1,            # 状态对话框显示行数
     "banners_collapsed": False,   # 状态对话框是否收起(只剩玻璃标签)
+    "notify_enabled": True,       # 是否发系统通知(关掉只留头顶气泡)
 }
 
 
@@ -548,6 +555,7 @@ class Companion(base.Pet):
         self.pending_ack_src = None   # "claude"/"codex":谁挂的,避免互相覆盖
         self.last_ack_remind = 0.0
         self.activity = ""; self.project = ""; self._spin_i = 0; self._claude_word = ""
+        self._notify_owner_cache = {}    # target -> AppleScript 指示符(探测一次就够)
 
         # Codex 实时状态(v2 hooks)
         self.codex_rec = None            # 当前展示的 session 记录
@@ -629,18 +637,58 @@ class Companion(base.Pet):
         # AppleScript 字符串字面量(UTF-8 直传,不用 \u 转义)
         return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-    def notify(self, title, text):
+    @staticmethod
+    def _bundle_installed(bundle_id):
+        """这个 bundle id 装了没。用 `path to application id`(运行期解析,
+        缺失只是 rc=1),不能把 id 直接写进主脚本 —— `application id` 是编译期
+        解析的,写一个不存在的 id 会让整段脚本编译失败,通知一条都发不出来。"""
         try:
-            subprocess.Popen(["osascript", "-e",
-                f'display notification {self._as_str(text)} with title {self._as_str(title)}'])
+            return subprocess.run(
+                ["osascript", "-e", f'path to application id "{bundle_id}"'],
+                capture_output=True, timeout=5).returncode == 0
+        except Exception:
+            return False
+
+    def _notify_owner(self, target):
+        """通知该"挂"在哪个 App 名下 —— 决定点通知时被唤到前台的是谁。
+
+        返回一个 AppleScript application 指示符,或 None(不归属)。
+        探测结果缓存,不会每条通知都去问一次 LaunchServices。
+        """
+        if target == "claude":
+            return self._as_str(self.data.get("terminal_app", "Terminal"))
+        if target == "codex":
+            bundles = CODEX_APP_BUNDLES
+        elif getattr(sys, "frozen", False):
+            # 喝水/提醒/专注这类跟 AI 无关的:挂在桌宠自己名下,点了就是关掉
+            bundles = (PET_BUNDLE_ID,)
+        else:
+            return None                     # 源码运行时没有 App bundle 可挂
+        if target not in self._notify_owner_cache:
+            found = next((b for b in bundles if self._bundle_installed(b)), None)
+            self._notify_owner_cache[target] = f'id "{found}"' if found else None
+        return self._notify_owner_cache[target]
+
+    def notify(self, title, text, target=None):
+        """target: None / "claude" / "codex" —— 点通知时唤起哪个 App。"""
+        if not self.data.get("notify_enabled", True):
+            return
+        script = f'display notification {self._as_str(text)} with title {self._as_str(title)}'
+        owner = self._notify_owner(target)
+        if owner:
+            # 归属失败(App 被删/没授权)也要保证通知还能发出去
+            script = (f"try\nwith timeout of 3 seconds\ntell application {owner} to {script}\n"
+                      f"end timeout\non error\n{script}\nend try")
+        try:
+            subprocess.Popen(["osascript", "-e", script])
         except Exception:
             pass
 
-    def speak(self, text, secs=4, notify=False, title="春田"):
+    def speak(self, text, secs=4, notify=False, title="春田", target=None):
         self.bubble.say(text, secs)
         self.bubble.place_above(self)
         if notify:
-            self.notify(title, text)
+            self.notify(title, text, target)
 
     # ---------- 每秒逻辑 ----------
     def second_tick(self):
@@ -695,10 +743,12 @@ class Companion(base.Pet):
             who = "Codex " if self.pending_ack_src == "codex" else ""
             if self.pending_ack == "waiting":
                 self.set_anim("spine", fallbacks=("thinking", "wait"))
-                self.speak(f"{who}还在等你确认/授权哦 👀", 5, notify=True, title="需要操作")
+                self.speak(f"{who}还在等你确认/授权哦 👀", 5, notify=True,
+                           title="需要操作", target=self.pending_ack_src)
             else:   # done
                 self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
-                self.speak(f"{who}跑完啦,回来看看我嘛~ ✅", 5, notify=True, title="运行完毕")
+                self.speak(f"{who}跑完啦,回来看看我嘛~ ✅", 5, notify=True,
+                           title="运行完毕", target=self.pending_ack_src)
 
         # 状态栏可见时刷新内容
         if self.status_panel.isVisible():
@@ -776,13 +826,14 @@ class Companion(base.Pet):
                 self.claude_ext = "waiting"
                 self._set_pending("waiting", "claude")
                 self.set_anim("spine", fallbacks=("thinking", "wait"))
-                self.speak("需要你确认/授权 👀 处理完点我一下", 6, notify=True, title="需要操作")
+                self.speak("需要你确认/授权 👀 处理完点我一下", 6, notify=True,
+                           title="需要操作", target="claude")
             elif word == "done":
                 self.claude_ext = None
                 self._set_pending("done", "claude")
                 self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
                 # 结果显示在横幅里,这里不再冒重复气泡
-                self.notify("运行完毕", (self.activity or "完成"))
+                self.notify("运行完毕", (self.activity or "完成"), target="claude")
             else:
                 self.claude_ext = None; self._clear_pending("claude")
             self._resolve_external()
@@ -816,7 +867,7 @@ class Companion(base.Pet):
             self._set_pending("waiting", "codex")
             self.set_anim("spine", fallbacks=("thinking", "wait"))
             self.speak("Codex 需要你批准 👀 处理完点我一下", 6,
-                       notify=True, title="Codex 需要操作")
+                       notify=True, title="Codex 需要操作", target="codex")
         elif state in ("done", "failed"):
             self.codex_ext = None
             # 同一个 (session, sequence) 只庆祝/哀嚎一次
@@ -827,11 +878,13 @@ class Companion(base.Pet):
                 if state == "done":
                     self._set_pending("done", "codex")
                     self.set_anim("victory", fallbacks=("pick", "wait"))
-                    self.notify("Codex 运行完毕", rec.get("activity") or "本轮任务已完成")
+                    self.notify("Codex 运行完毕", rec.get("activity") or "本轮任务已完成",
+                                target="codex")
                 else:
                     self._set_pending("done", "codex")
                     self.set_anim("die", fallbacks=("lying", "sit", "wait"))
-                    self.notify("Codex 出错了", rec.get("activity") or "本轮任务失败")
+                    self.notify("Codex 出错了", rec.get("activity") or "本轮任务失败",
+                                target="codex")
         else:                       # idle / 没有任何 session
             self.codex_ext = None; self._clear_pending("codex")
         self._resolve_external()
@@ -1247,6 +1300,10 @@ class Companion(base.Pet):
             a.triggered.connect(lambda _=False, x=n: self.set_cfg("banner_lines", x))
 
         cfg = m.addMenu("⚙️ 设置")
+        nt = cfg.addAction("🔔 系统通知")
+        nt.setCheckable(True); nt.setChecked(self.data.get("notify_enabled", True))
+        nt.setToolTip("点通知会唤起对应的终端 / Codex 窗口;关掉则只留头顶气泡")
+        nt.triggered.connect(self.toggle_notify)
         sm = cfg.addMenu("发送方式")
         for key, label in (("current", "键入当前会话"), ("new", "新终端启动")):
             a = sm.addAction(label); a.setCheckable(True)
@@ -1622,6 +1679,12 @@ class Companion(base.Pet):
             return
         self.data["reminders"].append({"text": text.strip(), "at": time.time() + mins * 60})
         self.save(); self.speak(f"好的,{mins}分钟后提醒你", 3)
+
+    def toggle_notify(self, checked):
+        self.data["notify_enabled"] = checked; self.save()
+        # 关的时候不能再走 notify(),否则这条提示自己就被吞了
+        self.speak("系统通知已开启 🔔(点通知会唤起对应窗口)" if checked
+                   else "系统通知已关闭 🔕(只留头顶气泡)", 5)
 
     def toggle_water(self, checked):
         self.data["water_enabled"] = checked; self.last_water = time.time(); self.save()
