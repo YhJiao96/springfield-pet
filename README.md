@@ -46,6 +46,7 @@
 - **5 套衣服**：默认水手服 / 女巫装 / 红斗篷 / 蓝礼服 / 泳装，每套含「战斗 + 休息」两套动作；支持定时自动换装。
 - **交互**：拖动、单击摸摸、**双击弹出头顶输入框**发指令(可选发给 Claude / Codex)、右键全功能菜单、悬浮显示状态栏、大小 75–150%。
 - **Claude / Codex 状态联动**：**可同时监控两个 AI**,头顶各一个带图标的对话框(🟠Claude 橙花 / ⚫Codex 黑圆六角星),显示「项目名 · 当前活动」+ 转圈；开工→举放大镜研究,需要授权/确认 & 跑完 → **持续提醒直到你理会**。右上角玻璃标签一键收起/展开。
+  Codex 走**官方 lifecycle hooks**,是**实时**的:提交任务、调用工具、等你批准、本轮结束都会立刻反映;**多个 Codex 会话同时跑也不会互相覆盖**,等你批准的那个会被优先顶到前面。
 - **OpenPets 风格小工具**：番茄钟专注计时、喝水提醒、自定义提醒、情绪记录、石头剪刀布、快捷启动、虚拟属性(心情/饱食/精力/等级)。
 - **迷你音乐播放器**：选文件夹播放，进度/上一首/下一首/播放暂停/循环模式，可拖动悬浮窗。
 
@@ -81,14 +82,49 @@ python run.py
 
 ### 方式一:一键接入(推荐,零配置)
 
-右键 → **「🔗 状态联动(可多选)」** → 勾选 Claude Code 和/或 Codex:
+右键 → **「🔗 状态联动(可多选)」** → 勾选 Claude Code 和/或 **Codex 实时状态 Hooks**:
 
 - **Claude Code**:自动把 hooks 合并进 `~/.claude/settings.json`(备份、不覆盖已有配置)。
   经助手脚本解析事件,可显示细粒度活动(读取/搜索/运行 X…)、需要授权、以及完成时的**结论开头**。
-- **Codex**:自动配置 `~/.codex/config.toml` 的 `notify`(备份 + **串联保留你原有的 notify / Computer Use**)。
-  Codex 的 notify 较粗,主要在**回合结束**触发 → 春田庆祝并持续提醒。
+- **Codex 实时状态 Hooks**:自动把六个 [lifecycle hooks](https://learn.chatgpt.com/docs/hooks)
+  合并进 `~/.codex/hooks.json`(带时间戳备份 + **完整保留其他软件已装的 hook**)。
 
-再点一次即「断开」,会还原原始配置。
+再点一次即「断开」,只摘掉本项目写入的 handler,别人的配置原样不动。
+
+#### Codex 能实时看到什么
+
+| 时机 | 春田的反应 | 头顶显示 |
+|---|---|---|
+| 新会话就绪 (`SessionStart`) | 待命 | `Codex 会话已就绪` · |
+| 你提交了任务 (`UserPromptSubmit`) | 举放大镜研究 | `正在理解新任务` ⠋ |
+| 正在调工具 (`PreToolUse`) | 举放大镜研究 | `正在运行命令 / 修改文件 / 读取文件…` ⠋ |
+| 工具跑完 (`PostToolUse`) | 举放大镜研究 | `已完成:修改文件` ⠋ |
+| **等你批准** (`PermissionRequest`) | 停下来等 + **持续提醒** | `等待批准:运行命令` 👀 |
+| 本轮结束 (`Stop`) | 庆祝一次 + 提醒 | `本轮任务已完成` ✅(显示 15 秒) |
+
+**多会话**:同时开几个 Codex 任务时,等你批准的那个优先展示,其次是正在干活的,
+再次是刚跑完的。某个会话的 Codex 意外退出后,它的「工作中」30 分钟后自动作废,
+春田不会一直傻转圈。
+
+> ⚠️ **首次接入后必须新开一个 Codex 会话**,并在会话里执行 `/hooks`
+> **审查并信任 SpringfieldPet Hooks** —— 未信任的 hook 不会被执行。
+
+#### 隐私
+
+状态只存在**你自己的电脑上**:`~/.springfield_pet/codex_sessions/<session>.json`,
+每个会话一个文件。里面**只有**会话 id、项目文件夹名、模型名、工具名和一句
+不超过 100 字的中文活动描述。
+
+**不会**写入你的 prompt、完整命令、工具输出、环境变量或任何密钥,也不联网。
+断开联动时这些文件会**保留**(方便排查),想清掉直接 `rm -rf ~/.springfield_pet/codex_sessions`。
+
+#### 兼容旧版 notify
+
+早期版本通过 `~/.codex/config.toml` 的 `notify` 接入,只能在**回合结束**时知道「跑完了」。
+现在仍兼容:只要还没有任何 hooks 状态文件,春田就退回读旧的 `codex_state`;
+一旦 hooks 开始工作,旧文件就被**完全忽略**,不会重复庆祝。
+关闭联动时,如果 `notify` 正是本项目装的那个包装脚本,会一并还原你原来的 notify
+(比如 Computer Use);不是本项目装的则原样不动。
 
 ### 方式二：手动配置
 
@@ -107,6 +143,7 @@ python run.py
 ```
 
 > ⚠️ **无论哪种方式**，hooks 都在 **Claude Code 会话启动时加载**，所以配置后需**新开一个 Claude Code 会话**才生效（旧会话不受影响）。之后你正常用 Claude，桌宠就会自动跟随状态，**无需再手动运行任何东西**。
+> Codex 同理：改完 `~/.codex/hooks.json` 要**新开 Codex 会话**并在 `/hooks` 里信任它。
 
 ## ⌨️ 把指令键入当前终端（macOS）
 
@@ -134,11 +171,23 @@ springfield-pet/
 ├── run.py                    # 入口
 ├── src/
 │   ├── pet.py                # 动画引擎(加载/渲染/拖动)
-│   └── companion.py          # 伴侣功能 + Claude 联动 + 播放器
+│   ├── companion.py          # 伴侣功能 + Claude/Codex 联动 + 播放器
+│   └── codex_status.py       # Codex hooks 协议/多会话聚合/hooks.json 合并(纯标准库)
+├── tests/                    # python3 -m unittest discover -s tests -v
 ├── assets/pet_assets/        # 透明帧序列 + manifest.json
 ├── build/                    # 图标 + PyInstaller 配置 + 打包脚本
 └── docs/
 ```
+
+## 🧪 测试
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 -m py_compile src/*.py
+```
+
+测试全部走 `tempfile`，**不会**碰你真实的 `~/.codex` 或 `~/.springfield_pet`，
+也不弹通知、不开窗口。
 
 ## 📜 许可
 

@@ -7,6 +7,7 @@
   - 情绪记录 · 小游戏(石头剪刀布)· 启动快捷方式
   - 头顶说话气泡 + 系统通知
   - Claude Code 状态联动(读 ~/.springfield_pet/claude_state)
+  - Codex 实时状态联动(lifecycle hooks -> ~/.springfield_pet/codex_sessions/*.json)
   - 单击小人 -> 弹框输入 prompt -> 新终端启动 claude
 
 运行: python3 springfield_companion.py
@@ -27,7 +28,8 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-import pet as base   # 复用动画引擎/拖动/换肤
+import codex_status as cxs   # Codex hooks 协议/聚合/配置合并(纯标准库,可单测)
+import pet as base           # 复用动画引擎/拖动/换肤
 
 AUDIO_EXTS = {".mp3", ".m4a", ".flac", ".wav", ".ogg", ".aac", ".opus"}
 
@@ -50,11 +52,19 @@ HOOK_TAG = "claude_hook.py"                 # 用于识别本项目写入的 hoo
 CLAUDE_HOOK_HELPER = STATE_DIR / "claude_hook.py"
 ACTIVITY_FILE = STATE_DIR / "claude_activity"
 PROJECT_FILE = STATE_DIR / "claude_project"
+CLAUDE_ICON = STATE_DIR / "claude_icon.png"
+CODEX_ICON = STATE_DIR / "codex_icon.png"
+
+# Codex 实时状态(v2:lifecycle hooks -> 每个 session 一个 JSON)
+CODEX_HOOKS_CONFIG = Path.home() / ".codex" / "hooks.json"
+CODEX_HOOK_HELPER = STATE_DIR / "codex_hook.py"
+CODEX_SESSION_DIR = STATE_DIR / "codex_sessions"
+CODEX_POLL_MS = 250
+
+# 旧版 notify 联动留下的粗粒度文件(仅在没有任何 v2 session 时作兜底)
 CODEX_STATE_FILE = STATE_DIR / "codex_state"
 CODEX_ACTIVITY_FILE = STATE_DIR / "codex_activity"
 CODEX_PROJECT_FILE = STATE_DIR / "codex_project"
-CLAUDE_ICON = STATE_DIR / "claude_icon.png"
-CODEX_ICON = STATE_DIR / "codex_icon.png"
 
 
 def _ensure_agent_icons():
@@ -319,16 +329,21 @@ class AgentBanner(QtWidgets.QWidget):
         h = QtWidgets.QHBoxLayout(card); h.setContentsMargins(13, 8, 16, 8); h.setSpacing(8)
         h.addWidget(self.icon, 0, QtCore.Qt.AlignVCenter); h.addWidget(self.text, 1)
         outer = QtWidgets.QVBoxLayout(self); outer.setContentsMargins(0, 0, 0, 0); outer.addWidget(card)
+        self._last = None      # 内容没变就不重新排版(250ms 轮询下省掉大量 relayout)
 
     def update_status(self, proj, act, right, max_lines=1):
         one_line = max_lines <= 1
-        self.text.setWordWrap(not one_line)
-        self.text.setMaximumWidth(300 if one_line else 380)
         cap = 44 if one_line else max_lines * 42
         act = self._one(act)
         act = act if len(act) <= cap else act[:cap] + "…"
         proj = f"<b>{_esc(self._one(proj))}</b>&nbsp;·&nbsp;" if proj else ""
-        self.text.setText(f"{proj}{_esc(act)}&nbsp;&nbsp;<span style='color:#8a93a0'>{right}</span>")
+        html = f"{proj}{_esc(act)}&nbsp;&nbsp;<span style='color:#8a93a0'>{right}</span>"
+        if (html, max_lines) == self._last and self.isVisible():
+            return
+        self._last = (html, max_lines)
+        self.text.setWordWrap(not one_line)
+        self.text.setMaximumWidth(300 if one_line else 380)
+        self.text.setText(html)
         self.adjustSize(); self.resize(self.sizeHint())
         self.show()
 
@@ -519,7 +534,9 @@ class Companion(base.Pet):
         self.setMouseTracking(True)
         self._hit_key = None; self._hit_img = None   # 命中测试图像缓存(避免每次鼠标移动都 toImage)
         self.scale = float(self.data.get("pet_scale", 1.0))
-        self.external_state = None       # Claude 状态:working/waiting
+        self.external_state = None       # 解析后的动画状态:working/waiting/None
+        self.claude_ext = None           # Claude 想要的状态
+        self.codex_ext = None            # Codex 想要的状态
         self.focus_end = 0
         self.last_water = time.time()
         self.last_outfit_change = time.time()
@@ -528,8 +545,14 @@ class Companion(base.Pet):
         self.waiting_since = 0.0
         self.last_wait_remind = 0.0
         self.pending_ack = None       # "done":跑完待理会,持续提醒直到用户互动
+        self.pending_ack_src = None   # "claude"/"codex":谁挂的,避免互相覆盖
         self.last_ack_remind = 0.0
         self.activity = ""; self.project = ""; self._spin_i = 0; self._claude_word = ""
+
+        # Codex 实时状态(v2 hooks)
+        self.codex_rec = None            # 当前展示的 session 记录
+        self._codex_key = None           # (session_id, sequence, effective_state)
+        self._codex_celebrated = None    # 已庆祝过的 (session_id, sequence)
         _ensure_agent_icons()
         self.banner_claude = AgentBanner(CLAUDE_ICON)
         self.banner_codex = AgentBanner(CODEX_ICON)
@@ -555,6 +578,11 @@ class Companion(base.Pet):
         self.claude_poll.timeout.connect(self.read_claude_state)
         self.claude_poll.start(300)
 
+        # Codex 实时状态:250ms 轮询 session 目录(watcher 只是加速)
+        self.codex_poll = QtCore.QTimer(self)
+        self.codex_poll.timeout.connect(self.read_codex_state)
+        self.codex_poll.start(CODEX_POLL_MS)
+
         # 监听 Claude 状态文件
         CLAUDE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         if not CLAUDE_STATE_FILE.exists():
@@ -562,6 +590,10 @@ class Companion(base.Pet):
         self.watcher = QtCore.QFileSystemWatcher(self)
         self.watcher.addPath(str(CLAUDE_STATE_FILE))
         self.watcher.fileChanged.connect(self.read_claude_state)
+        # 监听 session 目录(不是单个文件:原子替换后 watcher 会丢掉文件路径)
+        CODEX_SESSION_DIR.mkdir(parents=True, exist_ok=True)
+        self.watcher.addPath(str(CODEX_SESSION_DIR))
+        self.watcher.directoryChanged.connect(self.read_codex_state)
 
         self.bubble.say("春田上线啦～ 单击我发指令,右键看菜单", 5)
 
@@ -624,7 +656,7 @@ class Companion(base.Pet):
             left = int(self.focus_end - now)
             if left <= 0:
                 self.focus_end = 0
-                self.external_state = None
+                self._resolve_external()
                 self.add_xp(20); st["happiness"] = min(100, st["happiness"] + 10)
                 self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
                 self.speak("专注完成!休息一下吧 🎉", 6, notify=True, title="专注结束")
@@ -657,14 +689,16 @@ class Companion(base.Pet):
         self.read_claude_state()
 
         # 待理会 -> 每 13 秒持续提醒,直到点击(ack)或状态改变(在终端继续)
+        # 只提醒当前挂起的那一个(claude/codex 择优),不会两个 AI 各喊各的
         if self.pending_ack and now - self.last_ack_remind >= 13:
             self.last_ack_remind = now
+            who = "Codex " if self.pending_ack_src == "codex" else ""
             if self.pending_ack == "waiting":
                 self.set_anim("spine", fallbacks=("thinking", "wait"))
-                self.speak("还在等你确认/授权哦 👀", 5, notify=True, title="需要操作")
+                self.speak(f"{who}还在等你确认/授权哦 👀", 5, notify=True, title="需要操作")
             else:   # done
                 self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
-                self.speak("跑完啦,回来看看我嘛~ ✅", 5, notify=True, title="运行完毕")
+                self.speak(f"{who}跑完啦,回来看看我嘛~ ✅", 5, notify=True, title="运行完毕")
 
         # 状态栏可见时刷新内容
         if self.status_panel.isVisible():
@@ -693,6 +727,37 @@ class Companion(base.Pet):
         except Exception:
             return ""
 
+    # 待理会提醒的优先级:需要授权 > 跑完了
+    ACK_RANK = {"waiting": 2, "done": 1}
+
+    def _set_pending(self, kind, src):
+        """挂起"待理会"提醒。低优先级的一方不能盖掉另一个 AI 的高优先级提醒。"""
+        if (self.pending_ack and self.pending_ack_src != src
+                and self.ACK_RANK.get(kind, 0) < self.ACK_RANK.get(self.pending_ack, 0)):
+            return
+        self.pending_ack = kind
+        self.pending_ack_src = src
+        self.last_ack_remind = time.time()
+
+    def _clear_pending(self, src):
+        """只清掉自己挂的提醒,别把另一个 AI 的提醒顺手抹了。"""
+        if self.pending_ack and self.pending_ack_src == src:
+            self.pending_ack = None
+            self.pending_ack_src = None
+
+    def _resolve_external(self):
+        """把专注计时 / Claude / Codex 三个来源合成一个动画状态。
+
+        分开存各自的诉求再统一解析,这样 Codex 回到 idle 时不会误清掉
+        正在进行的专注计时,反之亦然。
+        """
+        if "waiting" in (self.claude_ext, self.codex_ext):
+            self.external_state = "waiting"
+        elif self.focus_end or "working" in (self.claude_ext, self.codex_ext):
+            self.external_state = "working"
+        else:
+            self.external_state = None
+
     def read_claude_state(self, *_):
         # 驱动小人动作 + 行为(仅 Claude,细粒度)
         try:
@@ -706,23 +771,70 @@ class Companion(base.Pet):
         if word and word != self._last_claude:
             self._last_claude = word
             if word == "working":
-                self.external_state = "working"; self.pending_ack = None
+                self.claude_ext = "working"; self._clear_pending("claude")
             elif word == "waiting":
-                self.external_state = "waiting"
-                self.pending_ack = "waiting"; self.last_ack_remind = time.time()
+                self.claude_ext = "waiting"
+                self._set_pending("waiting", "claude")
                 self.set_anim("spine", fallbacks=("thinking", "wait"))
                 self.speak("需要你确认/授权 👀 处理完点我一下", 6, notify=True, title="需要操作")
             elif word == "done":
-                self.external_state = None
-                self.pending_ack = "done"; self.last_ack_remind = time.time()
+                self.claude_ext = None
+                self._set_pending("done", "claude")
                 self.state = "perform"; self.set_anim("victory", fallbacks=("pick", "wait"))
                 # 结果显示在横幅里,这里不再冒重复气泡
                 self.notify("运行完毕", (self.activity or "完成"))
             else:
-                self.external_state = None; self.pending_ack = None
+                self.claude_ext = None; self._clear_pending("claude")
+            self._resolve_external()
         self._spin_i = (self._spin_i + 1) % len(self.SPIN)
         self._claude_word = word
         self.refresh_banners()
+
+    # ---------- Codex 实时状态(lifecycle hooks) ----------
+    def read_codex_state(self, *_):
+        """250ms 读一次 session 目录,只在状态/sequence 真的变了时才反应。"""
+        if str(CODEX_SESSION_DIR) not in self.watcher.directories():
+            try:
+                CODEX_SESSION_DIR.mkdir(parents=True, exist_ok=True)
+                self.watcher.addPath(str(CODEX_SESSION_DIR))
+            except Exception:
+                pass
+        rec = cxs.select_codex_session(CODEX_SESSION_DIR, time.time())
+        self.codex_rec = rec
+        key = cxs.session_change_key(rec)
+        if key != self._codex_key:
+            self._codex_key = key
+            self._on_codex_change(rec)
+        self.refresh_banners()
+
+    def _on_codex_change(self, rec):
+        state = rec.get("effective_state") if rec else None
+        if state == "working":
+            self.codex_ext = "working"; self._clear_pending("codex")
+        elif state == "waiting":
+            self.codex_ext = "waiting"
+            self._set_pending("waiting", "codex")
+            self.set_anim("spine", fallbacks=("thinking", "wait"))
+            self.speak("Codex 需要你批准 👀 处理完点我一下", 6,
+                       notify=True, title="Codex 需要操作")
+        elif state in ("done", "failed"):
+            self.codex_ext = None
+            # 同一个 (session, sequence) 只庆祝/哀嚎一次
+            once = (rec.get("session_id", ""), rec.get("sequence", 0))
+            if once != self._codex_celebrated:
+                self._codex_celebrated = once
+                self.state = "perform"
+                if state == "done":
+                    self._set_pending("done", "codex")
+                    self.set_anim("victory", fallbacks=("pick", "wait"))
+                    self.notify("Codex 运行完毕", rec.get("activity") or "本轮任务已完成")
+                else:
+                    self._set_pending("done", "codex")
+                    self.set_anim("die", fallbacks=("lying", "sit", "wait"))
+                    self.notify("Codex 出错了", rec.get("activity") or "本轮任务失败")
+        else:                       # idle / 没有任何 session
+            self.codex_ext = None; self._clear_pending("codex")
+        self._resolve_external()
 
     def toggle_banners(self):
         self.banners_collapsed = not self.banners_collapsed
@@ -736,7 +848,7 @@ class Companion(base.Pet):
             self.setup_claude_hooks() if on else self.remove_claude_hooks()
             self.claude_linked = on
         else:
-            self.setup_codex_notify() if on else self.remove_codex_notify()
+            self.setup_codex_hooks() if on else self.remove_codex_hooks()
             self.codex_linked = on
         self.refresh_banners()
 
@@ -764,20 +876,32 @@ class Companion(base.Pet):
         else:
             self.banner_claude.hide()
         if self.codex_linked:
-            try:
-                xw = CODEX_STATE_FILE.read_text().strip()
-                fresh = (time.time() - os.path.getmtime(CODEX_STATE_FILE)) < 15
-            except Exception:
-                xw = ""; fresh = False
-            self._fill(self.banner_codex, xw if fresh else "idle",
-                       self._read_small(CODEX_PROJECT_FILE) or "Codex",
-                       self._read_small(CODEX_ACTIVITY_FILE) if fresh else "", lines)
+            rec = self.codex_rec
+            if rec:      # v2 hooks 有有效 session -> 完全忽略旧 notify 的状态文件
+                self._fill(self.banner_codex, rec.get("effective_state", "idle"),
+                           rec.get("project") or "Codex", cxs.display_activity(rec), lines)
+            else:
+                self._fill(self.banner_codex, *self._legacy_codex_status(), lines)
         else:
             self.banner_codex.hide()
         ybottom = bn_bottom
         for b in (self.banner_claude, self.banner_codex):
             if b.isVisible():
                 b.place(cx, ybottom); ybottom -= b.height() + 6
+
+    @staticmethod
+    def _legacy_codex_status():
+        """旧版 notify 联动的兜底读取:(state, project, activity)。"""
+        try:
+            word = CODEX_STATE_FILE.read_text().strip()
+            fresh = (time.time() - os.path.getmtime(CODEX_STATE_FILE)) < 15
+        except Exception:
+            return "idle", "Codex", ""
+        if not fresh:
+            return "idle", Companion._read_small(CODEX_PROJECT_FILE) or "Codex", ""
+        return (word,
+                Companion._read_small(CODEX_PROJECT_FILE) or "Codex",
+                Companion._read_small(CODEX_ACTIVITY_FILE))
 
     def _fill(self, banner, word, proj, act, lines):
         if word == "working":
@@ -786,9 +910,12 @@ class Companion(base.Pet):
             right = "👀"
         elif word == "done":
             right = "✅"
+        elif word == "failed":
+            right = "⚠️"
         else:
             right = "·"   # idle/待命
-        act = act or {"working": "工作中", "waiting": "需要确认", "done": "完成"}.get(word, "待命中")
+        act = act or {"working": "工作中", "waiting": "需要确认",
+                      "done": "完成", "failed": "出错了"}.get(word, "待命中")
         banner.update_status(proj, act, right, lines)
 
     # ---------- 覆盖:行为受属性/状态影响 ----------
@@ -967,6 +1094,7 @@ class Companion(base.Pet):
         """理会提醒:跑完/等待的持续提醒到此为止。"""
         if self.pending_ack:
             self.pending_ack = None
+            self.pending_ack_src = None
             self.speak("好的~ 收到 👌", 2)
 
     def pet_pat(self):
@@ -1058,7 +1186,7 @@ class Companion(base.Pet):
         ca.setCheckable(True); ca.setChecked(self.claude_linked)
         ca.triggered.connect(lambda on: self._toggle_link("claude", on))
         if self.codex_installed():
-            xa = link.addAction("Codex")
+            xa = link.addAction("Codex 实时状态 Hooks")
             xa.setCheckable(True); xa.setChecked(self.codex_linked)
             xa.triggered.connect(lambda on: self._toggle_link("codex", on))
         else:
@@ -1255,17 +1383,119 @@ class Companion(base.Pet):
         except Exception as ex:
             self.speak(f"写入失败: {ex}", 5)
 
-    # ---------- Codex 一键接入 ----------
+    # ---------- Codex 一键接入(实时状态 Hooks) ----------
     def codex_installed(self):
-        return CODEX_CONFIG.exists()
+        return CODEX_CONFIG.exists() or CODEX_HOOKS_CONFIG.exists()
 
-    def codex_bound(self):
+    @staticmethod
+    def _codex_hook_tag():
+        """识别本项目 handler 的标记:命令里含 ".springfield_pet/codex_hook.py"。
+
+        万一状态目录被换到别处(标记对不上),就退回用 helper 的绝对路径当标记,
+        否则"已安装"检测会失效、重复点击就会重复写入。
+        """
+        helper = str(CODEX_HOOK_HELPER)
+        return cxs.HOOK_TAG if cxs.HOOK_TAG in helper else helper
+
+    def codex_hooks_installed(self):
+        """~/.codex/hooks.json 里有没有本项目的 handler。"""
+        try:
+            return cxs.hooks_config_has_helper(cxs.read_json_file(CODEX_HOOKS_CONFIG),
+                                               tag=self._codex_hook_tag())
+        except Exception:
+            return False
+
+    def codex_notify_bound(self):
+        """兼容:旧版通过 config.toml 的 notify 接入。"""
         try:
             return "codex_notify.sh" in CODEX_CONFIG.read_text()
         except Exception:
             return False
 
+    def codex_bound(self):
+        # 优先看 v2 hooks;旧 notify 仅作兼容识别
+        return self.codex_hooks_installed() or self.codex_notify_bound()
+
+    def _codex_hook_command(self, event):
+        py = self._hook_python()
+        # 事件名作为参数只是兜底:正常从 stdin 的 hook_event_name 读
+        return f"{shlex.quote(py)} {shlex.quote(str(CODEX_HOOK_HELPER))} {event}"
+
+    def setup_codex_hooks(self):
+        """把六个 lifecycle hook 幂等地合并进 ~/.codex/hooks.json。"""
+        # 1. 部署自包含 helper
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            CODEX_SESSION_DIR.mkdir(parents=True, exist_ok=True)
+            CODEX_HOOK_HELPER.write_text(cxs.CODEX_HOOK_HELPER_SRC, encoding="utf-8")
+            os.chmod(CODEX_HOOK_HELPER, 0o755)
+        except Exception as ex:
+            self.speak(f"写 Codex hook 助手失败: {ex}", 6); return
+
+        # 2. 读现有配置 —— 读不动就中止,绝不覆盖用户的文件
+        try:
+            cfg = cxs.read_json_file(CODEX_HOOKS_CONFIG)
+        except ValueError:
+            self.speak("~/.codex/hooks.json 不是合法 JSON,已中止(没有改动你的文件)。"
+                       "请先修好它再接入 🛑", 10, notify=True, title="Codex 接入失败")
+            return
+        except Exception as ex:
+            self.speak(f"读取 hooks.json 失败: {ex}", 6); return
+
+        # 3. 备份(带时间戳,不覆盖旧备份)
+        if CODEX_HOOKS_CONFIG.exists():
+            try:
+                stamp = time.strftime("%Y%m%d-%H%M%S")
+                (CODEX_HOOKS_CONFIG.parent / f"hooks.json.springfieldpet-{stamp}.bak"
+                 ).write_text(CODEX_HOOKS_CONFIG.read_text(encoding="utf-8"),
+                              encoding="utf-8")
+            except Exception:
+                pass
+
+        # 4. 合并 + 原子写回
+        cfg.setdefault("description", "Local lifecycle hooks")
+        try:
+            added = cxs.merge_hook_handlers(cfg, self._codex_hook_command,
+                                            tag=self._codex_hook_tag())
+            cxs.atomic_write_json(CODEX_HOOKS_CONFIG, cfg)
+        except Exception as ex:
+            self.speak(f"写入 hooks.json 失败: {ex}", 6); return
+
+        if added:
+            self.speak("已接入 Codex 实时状态 Hooks!请新开一个 Codex 会话,"
+                       "并在 /hooks 中审查并信任 SpringfieldPet Hooks 🔗", 12,
+                       notify=True, title="Codex 实时状态已开启")
+        else:
+            self.speak("已经接入过啦。新开 Codex 会话即可生效 🔗", 6)
+
+    def remove_codex_hooks(self):
+        """只摘掉本项目的 handler,保留其他软件写的 hook。"""
+        try:
+            cfg = cxs.read_json_file(CODEX_HOOKS_CONFIG)
+        except ValueError:
+            self.speak("~/.codex/hooks.json 不是合法 JSON,未做改动 🛑", 8); return
+        except Exception as ex:
+            self.speak(f"读取 hooks.json 失败: {ex}", 6); return
+        removed = 0
+        try:
+            removed = cxs.remove_hook_handlers(cfg, tag=self._codex_hook_tag())
+            if removed:
+                cxs.atomic_write_json(CODEX_HOOKS_CONFIG, cfg)
+        except Exception as ex:
+            self.speak(f"写入 hooks.json 失败: {ex}", 6); return
+        # 顺带还原旧版 notify(仅当当前 notify 就是我们自己装的那个)
+        if self.codex_notify_bound():
+            self.remove_codex_notify()
+        # 状态 JSON 留着不删(方便排查),只清掉内存里的展示
+        self.codex_rec = None; self._codex_key = None
+        self.codex_ext = None; self._clear_pending("codex"); self._resolve_external()
+        if removed:
+            self.speak("已断开 Codex 实时状态(新开 Codex 会话后生效)", 6)
+        else:
+            self.speak("没有可断开的 Codex Hooks", 4)
+
     def setup_codex_notify(self):
+        """旧版:通过 config.toml 的 notify 接入。仅保留供兼容/回退,菜单已不再调用。"""
         if not CODEX_CONFIG.exists():
             self.speak("没找到 Codex 配置(~/.codex/config.toml)", 5); return
         text = CODEX_CONFIG.read_text()
@@ -1320,7 +1550,8 @@ class Companion(base.Pet):
         except Exception as ex:
             self.speak(f"写入失败: {ex}", 5)
 
-    def remove_codex_notify(self):
+    def remove_codex_notify(self, quiet=True):
+        """还原 config.toml 里的 notify(只在当前 notify 是我们装的时候调用)。"""
         if not CODEX_CONFIG.exists():
             return
         text = CODEX_CONFIG.read_text()
@@ -1336,7 +1567,8 @@ class Companion(base.Pet):
             text = re.sub(r'(?m)^\s*notify\s*=\s*\[[^\n]*\]\n?', "", text, count=1)
         try:
             CODEX_CONFIG.write_text(text)
-            self.speak("已断开 Codex 联动(恢复原 notify)", 5)
+            if not quiet:
+                self.speak("已断开 Codex 联动(恢复原 notify)", 5)
         except Exception as ex:
             self.speak(f"写入失败: {ex}", 5)
 
@@ -1373,12 +1605,12 @@ class Companion(base.Pet):
 
     def start_focus(self, mins):
         self.focus_end = time.time() + mins * 60
-        self.external_state = "working"
+        self._resolve_external()
         self.set_anim("inspect", fallbacks=("thinking", "wait"))
         self.speak(f"开始专注 {mins} 分钟,加油!🍅", 4, notify=True, title="专注开始")
 
     def stop_focus(self):
-        self.focus_end = 0; self.external_state = None
+        self.focus_end = 0; self._resolve_external()
         self.speak("专注已停止", 3)
 
     def add_reminder(self):
