@@ -162,6 +162,45 @@ macOS 上用 `osascript` 发的通知会被系统算在**「脚本编辑器」**
 > 从源码跑的裸 Python 进程没有 App bundle，非 AI 类通知仍归「脚本编辑器」——
 > 想要完整体验请用打包好的 `.app`。
 
+## 🎨 用 GIF 导入自己的皮肤
+
+把一堆动作 GIF 丢进一个文件夹，一条命令生成一套新角色——**文件名就是动作名**：
+
+```
+my_gifs/
+  wait.gif        待机（必需；也可写 idle / 待机）
+  walk.gif        走路（move / run / 走路）
+  happy.gif       庆祝（victory / celebrate / 庆祝）
+  think.gif       思考（thinking / working / 思考）
+  …
+```
+
+```bash
+python3 tools/import_skin.py my_gifs --name mychar --display "我的角色"
+```
+
+重启桌宠 → 右键 **「👗 换衣服 → 我导入的」** 就能选它。全部可识别的动作名和
+别名见 `python3 tools/import_skin.py --help`。
+
+**它替你处理好三件容易翻车的事**：
+
+- **帧率对齐**：GIF 每帧时长常常不一样（100ms/40ms 混排），会自动按时长重采样到
+  25fps，动作快慢和原 GIF 一致。
+- **脚底锚点**：桌宠按脚底锚点渲染，切换动作时脚才不会跳。会取「底部一小条不透明
+  像素的水平中心」当锚点，角色前倾/挥手时也不会左右漂。想微调可加 `--foot-band`。
+- **自动裁剪 + 抠背景**：裁掉四周空白；GIF 没有透明通道时按角落色抠背景
+  （`--key-tolerance` 调容差，`--no-key` 关掉）。
+
+也吃 **APNG / 透明 WebP / PNG 序列目录**。`--dry-run` 先看分析结果不写文件。
+导入的皮肤只写进 `~/.springfield_pet` 之外的本地 `assets/`，不会碰内置素材。
+
+> 目前一套皮肤是**一整套动作**（没有战斗/重伤之分）；缺的动作会自动回退到相近的
+> 已有动作（比如没有 `inspect` 就用 `thinking`）。至少给一个 `wait`。
+>
+> ⚠️ 现阶段导入器面向**从源码运行**的用户（`python run.py`），皮肤写进仓库的
+> `assets/pet_assets/`。打包好的 `.app` 读的是内部只读素材，暂时读不到外部导入的
+> 皮肤——让 `.app` 也能加载用户皮肤（扫描 `~/.springfield_pet/skins/`）在计划中。
+
 ## ⌨️ 把指令键入当前终端（macOS）
 
 「双击 → 输入 prompt」默认会把内容**粘贴进你当前的终端会话**并回车。这需要给应用授权：

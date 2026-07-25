@@ -42,6 +42,23 @@ OUTFITS = {
     "swimsuit": {"name": "泳装",          "combat": "M1903_1107", "rest": "RM1903_1107"},
 }
 
+
+def custom_outfits(manifest):
+    """manifest 里被 tools/import_skin.py 标了 custom 的皮肤 -> 一套独立衣服。
+
+    导入的皮肤是单套动作集(没有 M/RM 之分),所以 rest 留空。
+    """
+    out = {}
+    for skin, meta in (manifest.get("skins") or {}).items():
+        if not isinstance(meta, dict) or not meta.get("custom"):
+            continue
+        out[f"custom:{skin}"] = {
+            "name": meta.get("display_name") or skin,
+            "combat": skin,
+            "rest": None,
+        }
+    return out
+
 STATE_DIR = Path.home() / ".springfield_pet"
 STATE_FILE = STATE_DIR / "state.json"
 CLAUDE_STATE_FILE = STATE_DIR / "claude_state"
@@ -606,21 +623,35 @@ class Companion(base.Pet):
         self.bubble.say("春田上线啦～ 单击我发指令,右键看菜单", 5)
 
     # ---------- 衣服(合并战斗+休息动作) ----------
+    def outfits(self):
+        """内置 5 套 + 用户导入的皮肤。"""
+        merged = dict(OUTFITS)
+        merged.update(custom_outfits(self.manifest))
+        return merged
+
     def load_outfit(self, outfit_id):
-        o = OUTFITS[outfit_id]
+        o = self.outfits()[outfit_id]
         anims = {}
-        anims.update(base.load_skin(o["rest"], self.manifest))    # 休息:sit/lying/pick…
-        anims.update(base.load_skin(o["combat"], self.manifest))  # 战斗覆盖同名(wait/move 用完好版)
+        if o.get("rest"):
+            anims.update(base.load_skin(o["rest"], self.manifest))    # 休息:sit/lying/pick…
+        anims.update(base.load_skin(o["combat"], self.manifest))      # 战斗覆盖同名
         return anims
 
     def switch_outfit(self, outfit_id):
-        if outfit_id == self.outfit:
+        all_outfits = self.outfits()
+        if outfit_id == self.outfit or outfit_id not in all_outfits:
+            return
+        anims = self.load_outfit(outfit_id)
+        if not anims:      # 导入的皮肤素材缺失时别把小人变没了
+            self.speak(f"「{all_outfits[outfit_id]['name']}」的素材读不到,先不换了", 5)
             return
         self.outfit = outfit_id
-        self.skin = OUTFITS[outfit_id]["combat"]
-        self.anims = self.load_outfit(outfit_id)
+        self.skin = all_outfits[outfit_id]["combat"]
+        self.anims = anims
         self.state = "idle"; self.dwell = random.randint(30, 80); self.set_anim("wait")
-        self.speak(f"换上「{OUTFITS[outfit_id]['name']}」啦~", 3)
+        if self.tray is not None:
+            self.tray.setIcon(self._pet_icon())     # 菜单栏图标跟着换
+        self.speak(f"换上「{all_outfits[outfit_id]['name']}」啦~", 3)
 
     # ---------- 存档 ----------
     def save(self):
@@ -753,7 +784,7 @@ class Companion(base.Pet):
         # 定时自动换装
         if self.data.get("auto_outfit") and now - self.last_outfit_change >= self.data.get("auto_outfit_min", 30) * 60:
             self.last_outfit_change = now
-            others = [o for o in OUTFITS if o != self.outfit]
+            others = [o for o in self.outfits() if o != self.outfit]
             if others:
                 self.switch_outfit(random.choice(others))
 
@@ -1302,6 +1333,14 @@ class Companion(base.Pet):
             a = skin.addAction(o["name"])
             a.setCheckable(True); a.setChecked(oid == self.outfit)
             a.triggered.connect(lambda _=False, x=oid: self.switch_outfit(x))
+        mine = custom_outfits(self.manifest)
+        if mine:
+            skin.addSeparator()
+            skin.addAction("— 我导入的 —").setEnabled(False)
+            for oid, o in mine.items():
+                a = skin.addAction(o["name"])
+                a.setCheckable(True); a.setChecked(oid == self.outfit)
+                a.triggered.connect(lambda _=False, x=oid: self.switch_outfit(x))
         skin.addSeparator()
         auto = skin.addAction("⏱ 定时自动换装")
         auto.setCheckable(True); auto.setChecked(self.data.get("auto_outfit", False))
