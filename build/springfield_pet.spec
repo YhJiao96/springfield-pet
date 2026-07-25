@@ -9,7 +9,7 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))   # 仓库根目录
 datas = [(os.path.join(ROOT, "assets", "pet_assets"), "pet_assets")]
 # run.py 在运行时才把 src/ 插进 sys.path,PyInstaller 静态分析跟不过去,
 # 所以 src 下的模块都要显式列出(codex_status 是 companion 的依赖)。
-hiddenimports = ["pet", "companion", "codex_status", "PySide6.QtMultimedia"]
+hiddenimports = ["pet", "companion", "codex_status", "import_skin", "PySide6.QtMultimedia"]
 
 a = Analysis(
     [os.path.join(ROOT, "run.py")],

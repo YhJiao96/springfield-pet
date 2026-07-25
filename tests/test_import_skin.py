@@ -7,7 +7,6 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 
 try:
@@ -348,6 +347,110 @@ class TestEndToEnd(unittest.TestCase):
         self.run_cli("--force")
         n_after = len(list((self.assets / "mychar" / "wait").glob("*.png")))
         self.assertLess(n_after, n_before)
+
+
+@unittest.skipIf(Image is None, "需要 Pillow")
+class TestRunImport(unittest.TestCase):
+    """run_import():GUI 和 CLI 共用的编程接口。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.src = Path(self.tmp.name) / "gifs"; self.src.mkdir()
+        self.assets = Path(self.tmp.name) / "skins"
+
+    def make(self, name, n=4):
+        frames = [solid((60, 60), (20 + i, 25, 40 + i, 50)) for i in range(n)]
+        write_gif(self.src / name, frames, [100] * n)
+
+    def test_returns_result_dict(self):
+        self.make("wait.gif"); self.make("walk.gif")
+        res = imp.run_import(self.src, "mychar", self.assets, display="我的")
+        self.assertEqual(res["skin"], "mychar")
+        self.assertEqual(sorted(res["animations"]), ["move", "wait"])
+        self.assertFalse(res["no_wait"])
+        self.assertTrue((self.assets / "mychar" / "wait").exists())
+        data = json.loads((self.assets / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["skins"]["mychar"]["display_name"], "我的")
+
+    def test_no_wait_flag(self):
+        self.make("walk.gif")
+        self.assertTrue(imp.run_import(self.src, "c", self.assets)["no_wait"])
+
+    def test_bad_name_raises_valueerror(self):
+        self.make("wait.gif")
+        with self.assertRaises(ValueError):
+            imp.run_import(self.src, "../evil", self.assets)
+
+    def test_empty_dir_raises(self):
+        self.make("random.gif")
+        with self.assertRaises(ValueError):
+            imp.run_import(self.src, "c", self.assets)
+
+    def test_dry_run_writes_nothing(self):
+        self.make("wait.gif")
+        imp.run_import(self.src, "c", self.assets, dry_run=True)
+        self.assertFalse(self.assets.exists())
+
+    def test_force_false_rejects_existing(self):
+        self.make("wait.gif")
+        imp.run_import(self.src, "c", self.assets)
+        with self.assertRaises(ValueError):
+            imp.run_import(self.src, "c", self.assets, force=False)
+        # force=True 默认允许覆盖
+        self.assertEqual(imp.run_import(self.src, "c", self.assets)["skin"], "c")
+
+
+class TestLoadManifest(unittest.TestCase):
+    """pet.load_manifest():合并内置 + 外部导入皮肤,各记素材根。"""
+
+    def setUp(self):
+        import os
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        import pet
+        self.pet = pet
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        self.builtin = base / "pet_assets"; self.builtin.mkdir()
+        self.external = base / "skins"; self.external.mkdir()
+        (self.builtin / "manifest.json").write_text(json.dumps({
+            "fps": 25, "skins": {"M1903": {"animations": {"wait": {"frames": 33}}}},
+        }), encoding="utf-8")
+        self._old_assets, self._old_ext = pet.ASSETS, pet.EXTERNAL_SKINS
+        pet.ASSETS, pet.EXTERNAL_SKINS = self.builtin, self.external
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        self.pet.ASSETS, self.pet.EXTERNAL_SKINS = self._old_assets, self._old_ext
+
+    def test_builtin_only_when_no_external(self):
+        m = self.pet.load_manifest()
+        self.assertEqual(list(m["skins"]), ["M1903"])
+        self.assertEqual(m["skins"]["M1903"]["_root"], str(self.builtin))
+
+    def test_external_merged_and_marked_custom(self):
+        (self.external / "manifest.json").write_text(json.dumps({
+            "skins": {"mychar": {"animations": {"wait": {"frames": 5}}, "display_name": "我的"}},
+        }), encoding="utf-8")
+        m = self.pet.load_manifest()
+        self.assertEqual(sorted(m["skins"]), ["M1903", "mychar"])
+        self.assertEqual(m["skins"]["mychar"]["_root"], str(self.external))
+        self.assertTrue(m["skins"]["mychar"]["custom"])
+        self.assertEqual(m["skins"]["M1903"]["_root"], str(self.builtin))   # 内置根不变
+
+    def test_corrupt_external_ignored(self):
+        (self.external / "manifest.json").write_text("}{ broken", encoding="utf-8")
+        m = self.pet.load_manifest()
+        self.assertEqual(list(m["skins"]), ["M1903"])       # 坏的外部文件不影响内置
+
+    def test_external_entry_without_animations_skipped(self):
+        (self.external / "manifest.json").write_text(json.dumps({
+            "skins": {"bad": {"display_name": "缺动画"}, "good": {"animations": {"wait": {}}}},
+        }), encoding="utf-8")
+        m = self.pet.load_manifest()
+        self.assertIn("good", m["skins"])
+        self.assertNotIn("bad", m["skins"])
 
 
 class TestAppIntegration(unittest.TestCase):

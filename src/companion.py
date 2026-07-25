@@ -29,6 +29,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 import codex_status as cxs   # Codex hooks 协议/聚合/配置合并(纯标准库,可单测)
+import import_skin           # GIF -> 皮肤(CLI 和 App 内导入共用)
 import pet as base           # 复用动画引擎/拖动/换肤
 
 AUDIO_EXTS = {".mp3", ".m4a", ".flac", ".wav", ".ogg", ".aac", ".opus"}
@@ -652,6 +653,55 @@ class Companion(base.Pet):
         if self.tray is not None:
             self.tray.setIcon(self._pet_icon())     # 菜单栏图标跟着换
         self.speak(f"换上「{all_outfits[outfit_id]['name']}」啦~", 3)
+
+    # ---------- 导入自定义皮肤(GIF -> 外部皮肤目录) ----------
+    def _new_skin_id(self):
+        existing = set(self.manifest.get("skins", {}))
+        i = 1
+        while f"imported_{i}" in existing:
+            i += 1
+        return f"imported_{i}"
+
+    def import_skin_dialog(self):
+        folder = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "选择放动作 GIF 的文件夹(文件名用 wait/move/victory…)", str(Path.home()))
+        if not folder:
+            return
+        name, ok = QtWidgets.QInputDialog.getText(self, "导入皮肤", "给这套皮肤起个名字:")
+        name = (name or "").strip()
+        if not ok or not name:
+            return
+        skin_id = self._new_skin_id()
+        try:
+            res = import_skin.run_import(folder, skin_id, base.EXTERNAL_SKINS,
+                                         display=name, force=True)
+        except Exception as ex:
+            self.speak(f"导入失败:{ex}", 7); return
+        self.manifest = base.load_manifest()        # 刷新,让新皮肤可用
+        n = len(res.get("animations", {}))
+        tip = "" if not res.get("no_wait") else "(没有 wait 动作,建议补一个)"
+        self.speak(f"导入「{name}」成功!{n} 个动作 🎨{tip}", 6)
+        self.switch_outfit(f"custom:{skin_id}")
+
+    def delete_custom_skin(self, outfit_id):
+        skin = outfit_id.split("custom:", 1)[-1]
+        # 不能删正穿着的那套 —— 先换回默认
+        if self.outfit == outfit_id:
+            self.switch_outfit("default")
+        try:
+            import shutil as _sh
+            _sh.rmtree(base.EXTERNAL_SKINS / skin, ignore_errors=True)
+            mpath = base.EXTERNAL_SKINS / "manifest.json"
+            if mpath.exists():
+                data = json.loads(mpath.read_text(encoding="utf-8"))
+                if data.get("skins", {}).pop(skin, None) is not None:
+                    tmp = mpath.with_suffix(".json.tmp")
+                    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    tmp.replace(mpath)
+        except Exception as ex:
+            self.speak(f"删除失败:{ex}", 5); return
+        self.manifest = base.load_manifest()
+        self.speak("已删除这套导入的皮肤", 4)
 
     # ---------- 存档 ----------
     def save(self):
@@ -1342,6 +1392,11 @@ class Companion(base.Pet):
                 a.setCheckable(True); a.setChecked(oid == self.outfit)
                 a.triggered.connect(lambda _=False, x=oid: self.switch_outfit(x))
         skin.addSeparator()
+        skin.addAction("🎨 导入皮肤(选 GIF 文件夹)…", self.import_skin_dialog)
+        if mine:
+            rm = skin.addMenu("🗑 删除导入的皮肤")
+            for oid, o in mine.items():
+                rm.addAction(o["name"], lambda _=False, x=oid: self.delete_custom_skin(x))
         auto = skin.addAction("⏱ 定时自动换装")
         auto.setCheckable(True); auto.setChecked(self.data.get("auto_outfit", False))
         auto.triggered.connect(self.toggle_auto_outfit)

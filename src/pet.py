@@ -30,6 +30,11 @@ def _asset_root():
 
 
 ASSETS = _asset_root()
+
+# 用户用 tools/import_skin.py 导入的皮肤写在这里(App 内「导入皮肤」也写这);
+# 打包成 .app 后内置素材是只读的,外部皮肤放这个可写目录,启动时一并加载。
+EXTERNAL_SKINS = Path.home() / ".springfield_pet" / "skins"
+
 FPS = 25
 FRAME_MS = int(1000 / FPS)
 
@@ -71,12 +76,40 @@ class Anim:
         return Anim(self.name + "_flip", flip, [w - self.anchor[0], self.anchor[1]], self.loop)
 
 
+def load_manifest():
+    """内置 manifest + 用户导入的外部皮肤,合并成一份。
+
+    每个皮肤记住自己的素材根(``_root``),这样 load_skin 知道去哪读帧 ——
+    内置皮肤在 ASSETS(打包后是只读的应用内目录),导入的在 EXTERNAL_SKINS。
+    外部 manifest 坏了/缺失都安全跳过,不影响内置皮肤。
+    """
+    with open(ASSETS / "manifest.json", encoding="utf-8") as f:
+        manifest = json.load(f)
+    for meta in (manifest.get("skins") or {}).values():
+        if isinstance(meta, dict):
+            meta.setdefault("_root", str(ASSETS))
+    ext = EXTERNAL_SKINS / "manifest.json"
+    if ext.exists():
+        try:
+            edata = json.loads(ext.read_text(encoding="utf-8"))
+        except Exception:
+            edata = {}
+        for skin, meta in (edata.get("skins") or {}).items():
+            if not isinstance(meta, dict) or "animations" not in meta:
+                continue
+            meta["_root"] = str(EXTERNAL_SKINS)
+            meta["custom"] = True
+            manifest.setdefault("skins", {})[skin] = meta
+    return manifest
+
+
 def load_skin(skin, manifest):
     """加载一套皮肤的全部动画为内存中的 QPixmap。"""
     anims = {}
-    entry = manifest["skins"][skin]["animations"]
-    for name, meta in entry.items():
-        adir = ASSETS / skin / name
+    skin_entry = manifest["skins"][skin]
+    root = Path(skin_entry.get("_root", str(ASSETS)))
+    for name, meta in skin_entry["animations"].items():
+        adir = root / skin / name
         files = sorted(adir.glob("frame_*.png"))
         if not files:
             continue
@@ -96,7 +129,7 @@ class Pet(QtWidgets.QWidget):
         self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating)
         self.resize(WIN_W, WIN_H)
 
-        self.manifest = json.load(open(ASSETS / "manifest.json"))
+        self.manifest = load_manifest()
         self.skin = DEFAULT_SKIN
         self.anims = load_skin(self.skin, self.manifest)
 

@@ -175,12 +175,17 @@ my_gifs/
   …
 ```
 
-```bash
-python3 tools/import_skin.py my_gifs --name mychar --display "我的角色"
-```
+**两种用法,任选其一**：
 
-重启桌宠 → 右键 **「👗 换衣服 → 我导入的」** 就能选它。全部可识别的动作名和
-别名见 `python3 tools/import_skin.py --help`。
+- **App 里直接导入(推荐,零命令行)**：右键 → **「👗 换衣服 → 🎨 导入皮肤…」**，
+  选放 GIF 的文件夹、起个名字，几秒后就换上了。想删就在
+  「👗 换衣服 → 🗑 删除导入的皮肤」里删。
+- **命令行**：
+  ```bash
+  python3 tools/import_skin.py my_gifs --name mychar --display "我的角色"
+  ```
+
+全部可识别的动作名和别名见 `python3 tools/import_skin.py --help`。
 
 **它替你处理好三件容易翻车的事**：
 
@@ -192,14 +197,15 @@ python3 tools/import_skin.py my_gifs --name mychar --display "我的角色"
   （`--key-tolerance` 调容差，`--no-key` 关掉）。
 
 也吃 **APNG / 透明 WebP / PNG 序列目录**。`--dry-run` 先看分析结果不写文件。
-导入的皮肤只写进 `~/.springfield_pet` 之外的本地 `assets/`，不会碰内置素材。
 
+> 导入的皮肤存到 **`~/.springfield_pet/skins/`**（每套一个文件夹 + 一份 manifest），
+> 打包好的 `.app` 启动时会一并扫描它，所以**下载 App 的人也能导入自己的角色**，
+> 不用碰源码。内置素材是只读的，导入不会碰到它。
+>
 > 目前一套皮肤是**一整套动作**（没有战斗/重伤之分）；缺的动作会自动回退到相近的
 > 已有动作（比如没有 `inspect` 就用 `thinking`）。至少给一个 `wait`。
 >
-> ⚠️ 现阶段导入器面向**从源码运行**的用户（`python run.py`），皮肤写进仓库的
-> `assets/pet_assets/`。打包好的 `.app` 读的是内部只读素材，暂时读不到外部导入的
-> 皮肤——让 `.app` 也能加载用户皮肤（扫描 `~/.springfield_pet/skins/`）在计划中。
+> 开发者想把皮肤放进仓库随包发布，加 `--assets assets/pet_assets` 即可。
 
 ## ⌨️ 把指令键入当前终端（macOS）
 
