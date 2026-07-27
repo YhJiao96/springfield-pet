@@ -47,6 +47,7 @@
 - **交互**：拖动、单击摸摸、**双击弹出头顶输入框**发指令(可选发给 Claude / Codex)、右键全功能菜单、悬浮显示状态栏、大小 75–150%。
 - **Claude / Codex 状态联动**：**可同时监控两个 AI**,头顶各一个带图标的对话框(🟠Claude 橙花 / ⚫Codex 黑圆六角星),显示「项目名 · 当前活动」+ 转圈；开工→举放大镜研究,需要授权/确认 & 跑完 → **持续提醒直到你理会**。右上角玻璃标签一键收起/展开。
   Codex 走**官方 lifecycle hooks**,是**实时**的:提交任务、调用工具、等你批准、本轮结束都会立刻反映;**多个 Codex 会话同时跑也不会互相覆盖**,等你批准的那个会被优先顶到前面。
+- **换成你自己的角色**：把动作 GIF 拖进去，或把 **Spine 骨骼素材**（少前 Q 版人形即此格式）本地渲染，一步做成新桌宠；App 内右键即可导入，下载打包版的人也能用。见 [制作你自己的桌宠角色](#-制作你自己的桌宠角色)。
 - **OpenPets 风格小工具**：番茄钟专注计时、喝水提醒、自定义提醒、情绪记录、石头剪刀布、快捷启动、虚拟属性(心情/饱食/精力/等级)。
 - **迷你音乐播放器**：选文件夹播放，进度/上一首/下一首/播放暂停/循环模式，可拖动悬浮窗。
 
@@ -162,62 +163,88 @@ macOS 上用 `osascript` 发的通知会被系统算在**「脚本编辑器」**
 > 从源码跑的裸 Python 进程没有 App bundle，非 AI 类通知仍归「脚本编辑器」——
 > 想要完整体验请用打包好的 `.app`。
 
-## 🎨 用 GIF 导入自己的皮肤
+## 🎨 制作你自己的桌宠角色
 
-把一堆动作 GIF 丢进一个文件夹，一条命令生成一套新角色——**文件名就是动作名**：
+想换成别的角色？看你手上的素材是什么形态，走下面两条路之一。做好的皮肤存在
+**`~/.springfield_pet/skins/`**，打包好的 `.app` 启动时会自动扫描，所以**下载 App
+的人也能造自己的角色，不用碰源码**。内置素材是只读的，你的导入永远不会覆盖它。
+
+> ⚠️ 请只使用**你有权使用**的素材。角色美术版权归各自权利人；本项目工具不含、
+> 也不下载任何游戏素材，一切在你本机进行。若用少前素材，请遵守
+> [素材版权声明](#️-素材版权声明--asset-copyright-notice)（个人学习、非商业）。
+
+### 路线 A：手上是动图 / 序列帧 —— 直接导入
+
+一套动作 = 一个文件，**文件名就是动作名**，丢进一个文件夹即可：
 
 ```
 my_gifs/
-  wait.gif        待机（必需；也可写 idle / 待机）
-  walk.gif        走路（move / run / 走路）
-  happy.gif       庆祝（victory / celebrate / 庆祝）
-  think.gif       思考（thinking / working / 思考）
+  wait.gif        待机（必需）
+  walk.gif        走路
+  happy.gif       庆祝
+  think.gif       思考
   …
 ```
 
-**两种用法,任选其一**：
+- **App 里导入（推荐，零命令行）**：右键 → **「👗 换衣服 → 🎨 导入皮肤…」**，
+  选文件夹、起名字，几秒就换上了。删除在「👗 换衣服 → 🗑 删除导入的皮肤」。
+- **命令行**：`python3 tools/import_skin.py my_gifs --name mychar --display "我的角色"`
 
-- **App 里直接导入(推荐,零命令行)**：右键 → **「👗 换衣服 → 🎨 导入皮肤…」**，
-  选放 GIF 的文件夹、起个名字，几秒后就换上了。想删就在
-  「👗 换衣服 → 🗑 删除导入的皮肤」里删。
-- **命令行**：
-  ```bash
-  python3 tools/import_skin.py my_gifs --name mychar --display "我的角色"
-  ```
+支持 **GIF / APNG / 透明 WebP / PNG 序列目录**。它替你处理好三件容易翻车的事：
+帧率对齐（按每帧时长重采样到 25fps）、脚底锚点（切换动作脚不跳）、自动裁边 + 抠背景。
+`--dry-run` 先看分析不写文件；完整选项见 `--help`。
 
-全部可识别的动作名和别名见 `python3 tools/import_skin.py --help`。
+### 路线 B：手上是 Spine 骨骼素材 —— 先渲染再导入
 
-**它替你处理好三件容易翻车的事**：
-
-- **帧率对齐**：GIF 每帧时长常常不一样（100ms/40ms 混排），会自动按时长重采样到
-  25fps，动作快慢和原 GIF 一致。
-- **脚底锚点**：桌宠按脚底锚点渲染，切换动作时脚才不会跳。会取「底部一小条不透明
-  像素的水平中心」当锚点，角色前倾/挥手时也不会左右漂。想微调可加 `--foot-band`。
-- **自动裁剪 + 抠背景**：裁掉四周空白；GIF 没有透明通道时按角落色抠背景
-  （`--key-tolerance` 调容差，`--no-key` 关掉）。
-
-也吃 **APNG / 透明 WebP / PNG 序列目录**。`--dry-run` 先看分析结果不写文件。
-
-> 导入的皮肤存到 **`~/.springfield_pet/skins/`**（每套一个文件夹 + 一份 manifest），
-> 打包好的 `.app` 启动时会一并扫描它，所以**下载 App 的人也能导入自己的角色**，
-> 不用碰源码。内置素材是只读的，导入不会碰到它。
->
-> 目前一套皮肤是**一整套动作**（没有战斗/重伤之分）；缺的动作会自动回退到相近的
-> 已有动作（比如没有 `inspect` 就用 `thinking`）。至少给一个 `wait`。
->
-> 开发者想把皮肤放进仓库随包发布，加 `--assets assets/pet_assets` 即可。
-
-### 从 Spine 素材(如少前解包)生成皮肤
-
-如果你手上是 **Spine 骨骼素材**（`.skel`/`.json` + `.atlas` + `.png`，少前 Q 版人形
-就是这个格式），用 `tools/spine_to_gif/` 先渲染成 GIF / 帧，再导入：
+少前的 Q 版人形、以及很多游戏/[Spine](https://esotericsoftware.com) 项目的素材，是
+**骨骼动画**格式：一套三件套 `骨骼(.skel 或 .json) + 图集描述(.atlas) + 图集图(.png)`。
+`tools/spine_to_gif/` 把它在本地渲染成帧，一步做成桌宠：
 
 ```bash
+# 一次性装依赖(约 150MB Chromium)
+pip install playwright Pillow
+python3 -m playwright install chromium
+
+# 渲染 + 导入成桌宠皮肤,一步到位
 python3 tools/spine_to_gif/spine_to_gif.py 素材目录 --to-skin mychar --display "我的角色"
 ```
 
-需要 `playwright` + 一次性 `python3 -m playwright install chromium`。素材**你自备**，
-渲染全程本地。详见 [`tools/spine_to_gif/README.md`](tools/spine_to_gif/README.md)。
+跑完重启桌宠，右键「👗 换衣服 → 我导入的」就能选它。也可以只导出 GIF（不加
+`--to-skin`，默认写到 `素材目录/_gif_out/`）留着预览或走路线 A。
+
+**用少前 Spine 素材的完整步骤**：
+
+1. 从你的来源拿到某个角色某套皮肤的 Spine 三件套（少前资料库 / Spine 查看类站点
+   通常能导出 `.skel`+`.atlas`+`.png`），放进**同一个文件夹**，
+   `.skel` 和 `.atlas` **建议同名**（如 `M1903.skel` / `M1903.atlas`）。
+2. `python3 tools/spine_to_gif/spine_to_gif.py 那个文件夹 --to-skin m1903 --display "春田"`
+3. 工具会自动识别所有动画、逐帧渲染、映射到桌宠动作、算好脚底锚点。
+   认不出对应动作的动画会跳过（但 GIF 输出仍是全部）。
+4. 重启桌宠 → 换衣服里选它。
+
+细节（帧率、锚点余量、动画名映射、只渲某几个动画等）见
+[`tools/spine_to_gif/README.md`](tools/spine_to_gif/README.md)。
+
+### 动作名对照表
+
+文件名 / Spine 动画名会映射到这些**桌宠动作槽**。至少给一个 `wait`；缺的动作会自动
+回退到相近的（比如没有 `inspect` 就用 `thinking`）。
+
+| 动作槽 | 可用的文件名 / 别名 | 桌宠什么时候播 |
+|---|---|---|
+| `wait`     | idle / 待机（**必需**） | 平时待机 |
+| `move`     | walk / run / 走路 | 在屏幕上走动 |
+| `victory`  | happy / celebrate / 庆祝 | AI 跑完、升级、被喂食 |
+| `thinking` | think / working / 思考 | 思考 / 工作中 |
+| `inspect`  | search / 研究 | AI 工作时「举放大镜研究」 |
+| `spine`    | skill | 需要你确认 / 授权时的等待姿势 |
+| `attack`   | click / poke / 点击 | 被单击时的反应 |
+| `pick`     | drag / 拖动 | 被鼠标拎起拖动时 |
+| `sit` `lying` | sit / 坐、sleep / 睡 / 躺 | 精力低时休息 |
+| `die`      | death / hurt / error / 受伤 / 死 | AI 报错 / 失败 |
+
+> 开发者想把皮肤放进仓库随包发布，给 `import_skin.py` 或 `spine_to_gif.py`
+> 加 `--assets assets/pet_assets` 即可（默认写用户目录，不进仓库）。
 
 ## ⌨️ 把指令键入当前终端（macOS）
 
@@ -244,14 +271,20 @@ build\build_windows.bat
 springfield-pet/
 ├── run.py                    # 入口
 ├── src/
-│   ├── pet.py                # 动画引擎(加载/渲染/拖动)
-│   ├── companion.py          # 伴侣功能 + Claude/Codex 联动 + 播放器
-│   └── codex_status.py       # Codex hooks 协议/多会话聚合/hooks.json 合并(纯标准库)
+│   ├── pet.py                # 动画引擎(加载/渲染/拖动;扫描用户导入的皮肤)
+│   ├── companion.py          # 伴侣功能 + Claude/Codex 联动 + 播放器 + 换装/导入
+│   ├── codex_status.py       # Codex hooks 协议/多会话聚合/hooks.json 合并(纯标准库)
+│   └── import_skin.py        # GIF/序列帧 -> 桌宠皮肤(帧率对齐 + 脚底锚点)
+├── tools/
+│   ├── import_skin.py        # 上面的命令行入口
+│   └── spine_to_gif/         # Spine 骨骼素材 -> GIF/皮肤(pixi-spine + Chromium)
 ├── tests/                    # python3 -m unittest discover -s tests -v
-├── assets/pet_assets/        # 透明帧序列 + manifest.json
+├── assets/pet_assets/        # 透明帧序列 + manifest.json(内置 10 套)
 ├── build/                    # 图标 + PyInstaller 配置 + 打包脚本
 └── docs/
 ```
+
+用户导入的皮肤放在 `~/.springfield_pet/skins/`（不进仓库，`.app` 启动时扫描）。
 
 ## 🧪 测试
 
