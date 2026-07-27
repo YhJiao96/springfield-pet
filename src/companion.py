@@ -34,13 +34,14 @@ import pet as base           # 复用动画引擎/拖动/换肤
 
 AUDIO_EXTS = {".mp3", ".m4a", ".flac", ".wav", ".ogg", ".aac", ".opus"}
 
-# 5 套衣服,每套 = 战斗动作集(M) + 休息动作集(RM),合并成一套完整动画
+# 5 套衣服,每套 = 战斗动作集(M) + 休息动作集(RM),合并成一套完整动画。
+# name 用少前官方皮肤名(id 是内部键,不要改,存档里记的是它)。
 OUTFITS = {
-    "default":  {"name": "默认 · 水手服", "combat": "M1903",      "rest": "RM1903"},
-    "witch":    {"name": "女巫装",        "combat": "M1903_5",    "rest": "RM1903_5"},
-    "cloak":    {"name": "红斗篷",        "combat": "M1903_302",  "rest": "RM1903_302"},
-    "dress":    {"name": "蓝礼服",        "combat": "M1903_802",  "rest": "RM1903_802"},
-    "swimsuit": {"name": "泳装",          "combat": "M1903_1107", "rest": "RM1903_1107"},
+    "default":  {"name": "制服(默认)",           "combat": "M1903",      "rest": "RM1903"},
+    "witch":    {"name": "万圣节 · 古典派女巫",   "combat": "M1903_5",    "rest": "RM1903_5"},
+    "cloak":    {"name": "圣诞节 · 圣善夜的祝福", "combat": "M1903_302",  "rest": "RM1903_302"},
+    "dress":    {"name": "晚礼服 · 灯火下的女王", "combat": "M1903_802",  "rest": "RM1903_802"},
+    "swimsuit": {"name": "泳装 · 睡醒的人鱼",     "combat": "M1903_1107", "rest": "RM1903_1107"},
 }
 
 
