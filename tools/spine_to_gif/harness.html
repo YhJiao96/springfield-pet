@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}</style>
+<script src="pixi.min.js"></script>
+<script src="pixi-spine.js"></script>
+</head>
+<body>
+<!--
+  SpringfieldPet · Spine 渲染 harness。
+  由 spine_to_gif.py 通过 playwright 驱动;pixi.min.js / pixi-spine.js 同目录。
+  暴露 4 个函数:spineLoad / spineMeasure / spineSetup / spineFrame。
+-->
+<script>
+let app = null, spine = null, skeletonData = null;
+function ns() { return PIXI.spine; }
+
+// 经 PIXI.Assets 加载(自动按 spine 版本选 runtime)。png 由 atlas 内部引用同目录。
+window.spineLoad = async function (skelUrl, atlasUrl) {
+  try {
+    const S = ns();
+    if (!S) throw new Error("PIXI.spine 命名空间不存在");
+    PIXI.Assets.add({ alias: "__spineAtlas", src: atlasUrl });
+    const atlas = await PIXI.Assets.load("__spineAtlas");
+    PIXI.Assets.add({ alias: "__spineSkel", src: skelUrl, data: { spineAtlas: atlas } });
+    const res = await PIXI.Assets.load("__spineSkel");
+    skeletonData = res.spineData || res;
+    if (!skeletonData || !skeletonData.animations)
+      throw new Error("加载结果无 spineData;keys=" + Object.keys(res || {}).join(","));
+    spine = new S.Spine(skeletonData);
+    spine.autoUpdate = false;
+    // setup-pose 包围盒(准确;pixi 的 getLocalBounds 有缓存,只在这里算一次可靠)
+    spine.skeleton.setToSetupPose();
+    spine.update(0);
+    const b = spine.getLocalBounds();
+    return {
+      version: skeletonData.version || "?",
+      pixi: PIXI.VERSION,
+      animations: skeletonData.animations.map(a => ({ name: a.name, duration: a.duration })),
+      bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+    };
+  } catch (e) { return { error: (e && e.stack) || String(e) }; }
+};
+
+// 建透明画布,固定 scale/位置(所有动画共用,保证切换不跳)。
+window.spineSetup = function (w, h, scale, originX, originY) {
+  try {
+    app = new PIXI.Application({ width: w, height: h, backgroundAlpha: 0,
+      antialias: true, preserveDrawingBuffer: true, autoStart: false });
+    document.body.appendChild(app.view);
+    spine.scale.set(scale, scale);
+    spine.position.set(originX, originY);
+    app.stage.addChild(spine);
+    return { ok: true };
+  } catch (e) { return { error: (e && e.stack) || String(e) }; }
+};
+
+// 渲一帧,返回透明 PNG 的 dataURL。
+// 关键:必须用 spine.update(delta) 把骨骼姿势同步到 pixi mesh 顶点 ——
+// 只调 state.apply + updateWorldTransform 不会刷新 mesh,canvas 会一直画初始姿势。
+// 每帧 setAnimation 把轨道重置回 0,再 update(time) 推进到该时刻(绝对 seek)。
+window.spineFrame = function (name, time) {
+  try {
+    spine.state.setAnimation(0, name, false);
+    spine.update(time);
+    app.renderer.render(app.stage);
+    return app.view.toDataURL("image/png");
+  } catch (e) { return "ERR:" + ((e && e.stack) || String(e)); }
+};
+</script>
+</body>
+</html>

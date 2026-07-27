@@ -683,6 +683,21 @@ class Companion(base.Pet):
         self.speak(f"导入「{name}」成功!{n} 个动作 🎨{tip}", 6)
         self.switch_outfit(f"custom:{skin_id}")
 
+    def show_spine_tool_help(self):
+        """Spine→GIF 是重工具(需 Chromium),不塞进 App,这里给命令行引导。"""
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle("Spine 素材转 GIF")
+        box.setTextFormat(QtCore.Qt.RichText)
+        box.setText(
+            "把《少女前线》这类 <b>Spine 骨骼素材</b>(.skel/.json + .atlas + .png)"
+            "渲染成 GIF / 桌宠皮肤。<br><br>"
+            "这一步用到无头浏览器,较重,所以放在<b>命令行</b>里本地跑(素材你自备):"
+            "<pre>python3 tools/spine_to_gif/spine_to_gif.py 素材目录 \\\n"
+            "    --to-skin mychar --display \"我的角色\"</pre>"
+            "跑完右键「👗 换衣服 → 我导入的」就能选它。<br>"
+            "详见仓库 <code>tools/spine_to_gif/README.md</code>。")
+        box.exec()
+
     def delete_custom_skin(self, outfit_id):
         skin = outfit_id.split("custom:", 1)[-1]
         # 不能删正穿着的那套 —— 先换回默认
@@ -1393,6 +1408,7 @@ class Companion(base.Pet):
                 a.triggered.connect(lambda _=False, x=oid: self.switch_outfit(x))
         skin.addSeparator()
         skin.addAction("🎨 导入皮肤(选 GIF 文件夹)…", self.import_skin_dialog)
+        skin.addAction("🎬 Spine 素材转 GIF…", self.show_spine_tool_help)
         if mine:
             rm = skin.addMenu("🗑 删除导入的皮肤")
             for oid, o in mine.items():

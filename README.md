@@ -207,6 +207,18 @@ my_gifs/
 >
 > 开发者想把皮肤放进仓库随包发布，加 `--assets assets/pet_assets` 即可。
 
+### 从 Spine 素材(如少前解包)生成皮肤
+
+如果你手上是 **Spine 骨骼素材**（`.skel`/`.json` + `.atlas` + `.png`，少前 Q 版人形
+就是这个格式），用 `tools/spine_to_gif/` 先渲染成 GIF / 帧，再导入：
+
+```bash
+python3 tools/spine_to_gif/spine_to_gif.py 素材目录 --to-skin mychar --display "我的角色"
+```
+
+需要 `playwright` + 一次性 `python3 -m playwright install chromium`。素材**你自备**，
+渲染全程本地。详见 [`tools/spine_to_gif/README.md`](tools/spine_to_gif/README.md)。
+
 ## ⌨️ 把指令键入当前终端（macOS）
 
 「双击 → 输入 prompt」默认会把内容**粘贴进你当前的终端会话**并回车。这需要给应用授权：

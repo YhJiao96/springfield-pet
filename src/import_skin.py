@@ -81,7 +81,7 @@ ALIASES = {
     "drag": "pick", "拖动": "pick",
     "sleep": "lying", "睡": "lying", "躺": "lying",
     "坐": "sit",
-    "hurt": "die", "error": "die", "受伤": "die",
+    "hurt": "die", "error": "die", "受伤": "die", "death": "die", "dead": "die", "死": "die",
     "skill": "spine",
 }
 

@@ -15,6 +15,12 @@ dist/
 # 运行时数据
 .springfield_pet/
 
+# spine_to_gif 的运行时下载(pixi/pixi-spine)与渲染产物
+tools/spine_tools_cache/
+_gif_out/
+*.skel
+*.atlas
+
 # 系统
 .DS_Store
 Thumbs.db
